@@ -1,0 +1,37 @@
+palobar is a cheap clone of GNOME visual style for niri
+
+![panel][screenshot/top-bar.png]
+
+
+| component | palobar |
+| - | - |
+| top bar | ok + systray |
+| top bar right panel | missing btooth & various |
+| dock | nope, but not sure i want ? |
+| overview | OK done |
+
+| gnome-settings | palobar |
+| - | - |
+| wifi | todo |
+| network | todo |
+| bluetooth | todo |
+| screens | NA? or alternative niri stuff? |
+| sound | todo |
+| energy | todo |
+| multi task | NA |
+| appearance | todo |
+| notifi | todo |
+| research | todo |
+| accounts | todo |
+| share | todo |
+| wellbeing | todo |
+| mouse | todo |
+| keyb | todo |
+| colors | todo |
+| printers | todo |
+| accessibilty | todo |
+| private | todo |
+| system | todo |
+
+
+
