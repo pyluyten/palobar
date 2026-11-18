@@ -144,6 +144,8 @@ window.panel-window {
 .qs-icon-btn,
 .qs-chevron-btn {
   background-color: $card-bg;
+  background-image: none;
+  box-shadow: none;
   border: none;
   border-radius: 999px;
   padding: 8px;
@@ -189,6 +191,8 @@ window.panel-window {
 
 .qs-toggle-pill {
   background-color: $card-bg;
+  background-image: none;
+  box-shadow: none;
   border: none;
   border-radius: 14px;
   padding: 10px 14px;
@@ -255,6 +259,8 @@ window.panel-window {
 .notif-dnd-btn,
 .notif-clear-btn {
   background-color: $card-bg;
+  background-image: none;
+  box-shadow: none;
   border: none;
   border-radius: 999px;
   padding: 5px 10px;

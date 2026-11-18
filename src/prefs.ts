@@ -40,6 +40,8 @@ window.prefs-window {
 
 .prefs-btn {
   background-color: rgba(255, 255, 255, 0.1);
+  background-image: none;
+  box-shadow: none;
   border: none;
   border-radius: 10px;
   padding: 7px 14px;

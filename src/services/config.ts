@@ -111,13 +111,21 @@ class ConfigService {
 
   private watch() {
     try {
-      const file = Gio.File.new_for_path(CONFIG_PATH);
-      this.monitor = file.monitor_file(Gio.FileMonitorFlags.NONE, null);
-      this.monitor.connect("changed", (_mon, _file, _other, eventType) => {
+      GLib.mkdir_with_parents(CONFIG_DIR, 0o755);
+      const dir = Gio.File.new_for_path(CONFIG_DIR);
+      this.monitor = dir.monitor_directory(
+        Gio.FileMonitorFlags.WATCH_MOVES,
+        null,
+      );
+      this.monitor.connect("changed", (_mon, file, other, eventType) => {
+        const name = file?.get_basename();
+        const otherName = other?.get_basename();
+        if (name !== "config.json" && otherName !== "config.json") {
+          return;
+        }
         if (
-          eventType !== Gio.FileMonitorEvent.CHANGED &&
-          eventType !== Gio.FileMonitorEvent.CREATED &&
-          eventType !== Gio.FileMonitorEvent.CHANGES_DONE_HINT
+          eventType === Gio.FileMonitorEvent.DELETED &&
+          otherName !== "config.json"
         ) {
           return;
         }
@@ -127,12 +135,13 @@ class ConfigService {
         this.debounceId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 120, () => {
           this.debounceId = null;
           this.current = loadConfig();
+          console.log("[config] reloaded:", JSON.stringify(this.current));
           this.emit();
           return GLib.SOURCE_REMOVE;
         });
       });
     } catch (err) {
-      console.error("[config] failed to watch config file:", err);
+      console.error("[config] failed to watch config dir:", err);
     }
   }
 }

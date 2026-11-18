@@ -24,11 +24,18 @@ function applyWallpaper(cfg: PalobarConfig) {
 
   stopWallpaper();
 
-  const args = ["swaybg", "-c", color || "#131316"];
+  const swaybgBin = GLib.find_program_in_path("swaybg");
+  if (!swaybgBin) {
+    console.error("[wallpaper] swaybg not found in PATH");
+    return;
+  }
+
+  const args = [swaybgBin, "-c", color || "#131316"];
   if (path && GLib.file_test(path, GLib.FileTest.EXISTS)) {
     args.push("-m", mode || "fill", "-i", path);
   }
 
+  console.log("[wallpaper] running:", args.join(" "));
   try {
     currentProc = Gio.Subprocess.new(args, Gio.SubprocessFlags.NONE);
   } catch (err) {
