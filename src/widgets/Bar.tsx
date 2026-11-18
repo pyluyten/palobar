@@ -1,5 +1,5 @@
 import app from "ags/gtk4/app";
-import { Astal, Gdk } from "ags/gtk4";
+import { Astal, Gdk, Gtk } from "ags/gtk4";
 import { createPoll } from "ags/time";
 import { createState, For } from "ags";
 import AstalWp from "gi://AstalWp";
@@ -7,7 +7,6 @@ import AstalNetwork from "gi://AstalNetwork";
 import AstalNotifd from "gi://AstalNotifd";
 import { niri, type NiriWorkspace } from "../services/niri";
 import { popups } from "../services/popups";
-import { toggleLauncher } from "./Launcher";
 import { SysTray } from "./Tray";
 
 function formatGnomeDate(): string {
@@ -33,15 +32,20 @@ function Workspaces() {
   niri.subscribe((list) => setWorkspaces(list));
 
   return (
-    <box class="workspaces" spacing={4}>
+    <box class="workspaces" spacing={2} valign={Gtk.Align.CENTER}>
       <For each={workspaces}>
         {(ws) => (
           <button
             class={`workspace-pill ${ws.is_focused ? "focused" : ""} ${ws.is_active ? "active" : ""} ${ws.is_urgent ? "urgent" : ""}`}
+            valign={Gtk.Align.CENTER}
             onClicked={() => niri.focusWorkspace(ws.idx)}
             tooltipText={ws.name ?? `Workspace ${ws.idx}`}
           >
-            <box class="workspace-dot" />
+            <box
+              class="workspace-dot"
+              valign={Gtk.Align.CENTER}
+              halign={Gtk.Align.CENTER}
+            />
           </button>
         )}
       </For>
@@ -144,14 +148,8 @@ export function Bar(gdkmonitor: Gdk.Monitor, index: number) {
       application={app}
     >
       <centerbox class="panel">
-        {/* Left: Activities + Workspaces */}
+        {/* Left: Workspaces */}
         <box $type="start" class="panel-left" spacing={8}>
-          <button
-            class="panel-button activities-button"
-            onClicked={() => toggleLauncher(gdkmonitor)}
-          >
-            <label label="Activities" />
-          </button>
           <Workspaces />
         </box>
 
