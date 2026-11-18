@@ -13,10 +13,13 @@ export interface NiriWorkspace {
 }
 
 type Listener = (workspaces: NiriWorkspace[]) => void;
+type OverviewListener = (isOpen: boolean) => void;
 
 class NiriService {
   private workspaces: NiriWorkspace[] = [];
+  private overviewOpen = false;
   private listeners = new Set<Listener>();
+  private overviewListeners = new Set<OverviewListener>();
   private running = false;
 
   constructor() {
@@ -24,12 +27,16 @@ class NiriService {
   }
 
   private async init() {
-    await this.refreshWorkspaces();
+    await Promise.all([this.refreshWorkspaces(), this.refreshOverviewState()]);
     this.startEventStream();
   }
 
   getWorkspaces(): NiriWorkspace[] {
     return this.workspaces;
+  }
+
+  isOverviewOpen(): boolean {
+    return this.overviewOpen;
   }
 
   subscribe(listener: Listener): () => void {
@@ -40,9 +47,23 @@ class NiriService {
     };
   }
 
+  subscribeOverview(listener: OverviewListener): () => void {
+    this.overviewListeners.add(listener);
+    listener(this.overviewOpen);
+    return () => {
+      this.overviewListeners.delete(listener);
+    };
+  }
+
   private emit() {
     for (const listener of this.listeners) {
       listener(this.workspaces);
+    }
+  }
+
+  private emitOverview() {
+    for (const listener of this.overviewListeners) {
+      listener(this.overviewOpen);
     }
   }
 
@@ -61,20 +82,31 @@ class NiriService {
     }
   }
 
-  async focusWorkspace(idx: number) {
+  async refreshOverviewState() {
     try {
-      await execAsync(["niri", "msg", "action", "focus-workspace", String(idx)]);
+      const out = await execAsync(["niri", "msg", "-j", "overview-state"]);
+      const parsed = JSON.parse(out) as { is_open: boolean };
+      this.overviewOpen = Boolean(parsed.is_open);
+      this.emitOverview();
     } catch (err) {
-      console.error("[niri] failed to focus workspace:", err);
+      console.error("[niri] failed to fetch overview state:", err);
     }
   }
 
-  async toggleOverview() {
+  async sendAction(action: string, ...args: string[]) {
     try {
-      await execAsync(["niri", "msg", "action", "toggle-overview"]);
+      await execAsync(["niri", "msg", "action", action, ...args]);
     } catch (err) {
-      console.error("[niri] failed to toggle overview:", err);
+      console.error(`[niri] failed action ${action}:`, err);
     }
+  }
+
+  async focusWorkspace(idx: number) {
+    await this.sendAction("focus-workspace", String(idx));
+  }
+
+  async toggleOverview() {
+    await this.sendAction("toggle-overview");
   }
 
   private startEventStream() {
@@ -135,6 +167,12 @@ class NiriService {
           is_focused: payload.focused ? ws.id === payload.id : ws.is_focused,
         }));
         this.emit();
+      } else if ("OverviewOpenedOrClosed" in event) {
+        const payload = event.OverviewOpenedOrClosed as {
+          is_open: boolean;
+        };
+        this.overviewOpen = Boolean(payload.is_open);
+        this.emitOverview();
       }
     } catch (err) {
       console.error("[niri] failed to parse event:", err);

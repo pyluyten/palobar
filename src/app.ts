@@ -6,6 +6,7 @@ import { QuickSettings } from "./widgets/QuickSettings";
 import { NotificationsPopup } from "./widgets/NotificationsPopup";
 import { NotificationToasts } from "./widgets/NotificationToasts";
 import { toggleLauncher } from "./widgets/Launcher";
+import { initOverviewCapture } from "./widgets/OverviewCapture";
 import { initWallpaperService, stopWallpaper } from "./services/wallpaper";
 import { lockScreen } from "./services/lockscreen";
 
@@ -33,6 +34,7 @@ app.start({
   },
   main() {
     initWallpaperService();
+    initOverviewCapture();
 
     const monitors = app.get_monitors();
     monitors.forEach((monitor, index) => Bar(monitor, index));

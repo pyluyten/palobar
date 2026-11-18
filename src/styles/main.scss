@@ -11,7 +11,8 @@ $danger: #e01b24;
 
 window.panel-window,
 window.popup-window,
-window.toast-window {
+window.toast-window,
+window.overview-capture-window {
   background: transparent;
   color: $panel-fg;
   font-family: "Cantarell", "Inter", sans-serif;

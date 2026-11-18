@@ -5,12 +5,27 @@ import GLib from "gi://GLib";
 import { popups } from "../services/popups";
 
 let launcherWindow: Gtk.Window | null = null;
+const stateListeners = new Set<(open: boolean) => void>();
+
+function notifyLauncherState(open: boolean) {
+  for (const listener of stateListeners) {
+    listener(open);
+  }
+}
+
+export function onLauncherStateChange(
+  listener: (open: boolean) => void,
+): () => void {
+  stateListeners.add(listener);
+  return () => stateListeners.delete(listener);
+}
 
 export function closeLauncher() {
   if (launcherWindow) {
     launcherWindow.close();
     launcherWindow.destroy();
     launcherWindow = null;
+    notifyLauncherState(false);
   }
 }
 
@@ -18,7 +33,12 @@ export function isLauncherOpen(): boolean {
   return launcherWindow !== null;
 }
 
-export function toggleLauncher(monitor?: Gdk.Monitor) {
+export function openLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
+  if (launcherWindow) return;
+  toggleLauncher(monitor, initialQuery);
+}
+
+export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
   if (launcherWindow) {
     closeLauncher();
     return;
@@ -120,6 +140,7 @@ export function toggleLauncher(monitor?: Gdk.Monitor) {
     primary_icon_name: "system-search-symbolic",
     halign: Gtk.Align.CENTER,
     width_request: 420,
+    text: initialQuery ?? "",
   });
   searchEntry.add_css_class("launcher-search");
 
@@ -147,7 +168,7 @@ export function toggleLauncher(monitor?: Gdk.Monitor) {
   });
   searchEntry.add_controller(searchKeyCtrl);
 
-  renderApps("");
+  renderApps(initialQuery ?? "");
 
   const scrolled = new Gtk.ScrolledWindow({
     vexpand: true,
@@ -209,9 +230,11 @@ export function toggleLauncher(monitor?: Gdk.Monitor) {
   win.add_controller(backdropClick);
 
   launcherWindow = win;
+  notifyLauncherState(true);
 
   GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
     searchEntry.grab_focus();
+    searchEntry.set_position(-1);
     return GLib.SOURCE_REMOVE;
   });
 }
