@@ -7,6 +7,7 @@ import AstalNetwork from "gi://AstalNetwork";
 import AstalNotifd from "gi://AstalNotifd";
 import { niri, type NiriWorkspace } from "../services/niri";
 import { popups } from "../services/popups";
+import { toggleLauncher } from "./Launcher";
 
 function formatGnomeDate(): string {
   const now = new Date();
@@ -146,11 +147,7 @@ export function Bar(gdkmonitor: Gdk.Monitor, index: number) {
         <box $type="start" class="panel-left" spacing={8}>
           <button
             class="panel-button activities-button"
-            onClicked={() => {
-              popups.close();
-              // TODO Jalon 3: open fullscreen Activities launcher
-              niri.toggleOverview();
-            }}
+            onClicked={() => toggleLauncher(gdkmonitor)}
           >
             <label label="Activities" />
           </button>

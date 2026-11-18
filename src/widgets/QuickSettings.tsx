@@ -2,9 +2,11 @@ import app from "ags/gtk4/app";
 import { Astal, Gdk, Gtk } from "ags/gtk4";
 import { createState, For } from "ags";
 import { execAsync } from "ags/process";
+import GLib from "gi://GLib";
 import AstalWp from "gi://AstalWp";
 import AstalNetwork from "gi://AstalNetwork";
 import { popups } from "../services/popups";
+import { lockScreen } from "../services/lockscreen";
 
 function runSessionCmd(cmd: string[]) {
   popups.close();
@@ -218,8 +220,34 @@ export function QuickSettings(gdkmonitor: Gdk.Monitor) {
 
           <button
             class="qs-circle-btn"
+            tooltipText="Preferences"
+            onClicked={() => {
+              popups.close();
+              const bundledPrefs = GLib.find_program_in_path("palobar-prefs");
+              if (bundledPrefs) {
+                execAsync([bundledPrefs]).catch((err) =>
+                  console.error("[prefs] failed to launch:", err),
+                );
+                return;
+              }
+              const prefsPath = GLib.file_test("prefs.ts", GLib.FileTest.EXISTS)
+                ? "prefs.ts"
+                : "src/prefs.ts";
+              execAsync(["ags", "run", prefsPath]).catch((err) =>
+                console.error("[prefs] failed to launch:", err),
+              );
+            }}
+          >
+            <image iconName="preferences-system-symbolic" />
+          </button>
+
+          <button
+            class="qs-circle-btn"
             tooltipText="Lock Screen"
-            onClicked={() => runSessionCmd(["loginctl", "lock-session"])}
+            onClicked={() => {
+              popups.close();
+              lockScreen();
+            }}
           >
             <image iconName="system-lock-screen-symbolic" />
           </button>

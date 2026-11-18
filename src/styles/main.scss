@@ -320,3 +320,50 @@ window.panel-window {
     color: $panel-fg;
   }
 }
+
+/* Activities Launcher */
+window.launcher-window {
+  background-color: rgba(16, 16, 20, 0.88);
+  color: $panel-fg;
+  font-family: "Cantarell", "Inter", sans-serif;
+}
+
+.launcher-search {
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 10px 18px;
+  color: $panel-fg;
+  font-size: 15px;
+
+  &:focus {
+    background-color: rgba(255, 255, 255, 0.14);
+    border-color: $accent;
+  }
+}
+
+.launcher-grid {
+  padding: 12px;
+}
+
+.launcher-flow-child {
+  border-radius: 16px;
+  padding: 14px 10px;
+  transition: background-color 140ms ease;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.09);
+  }
+
+  &:selected,
+  &:focus {
+    background-color: rgba(53, 132, 228, 0.32);
+    outline: 1px solid rgba(53, 132, 228, 0.65);
+  }
+}
+
+.launcher-tile-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: $panel-fg;
+}
