@@ -270,6 +270,17 @@ export function QuickSettings(gdkmonitor: Gdk.Monitor) {
         >
           <button
             class="qs-power-item"
+            onClicked={() =>
+              runSessionCmd(["niri", "msg", "action", "quit", "--skip-confirmation"])
+            }
+          >
+            <box spacing={10}>
+              <image iconName="system-log-out-symbolic" />
+              <label label="Log Out" />
+            </box>
+          </button>
+          <button
+            class="qs-power-item"
             onClicked={() => runSessionCmd(["systemctl", "suspend"])}
           >
             <box spacing={10}>

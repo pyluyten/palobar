@@ -6,7 +6,7 @@ import { QuickSettings } from "./widgets/QuickSettings";
 import { NotificationsPopup } from "./widgets/NotificationsPopup";
 import { NotificationToasts } from "./widgets/NotificationToasts";
 import { toggleLauncher } from "./widgets/Launcher";
-import { initWallpaperService } from "./services/wallpaper";
+import { initWallpaperService, stopWallpaper } from "./services/wallpaper";
 import { lockScreen } from "./services/lockscreen";
 
 app.start({
@@ -21,6 +21,12 @@ app.start({
     if (cmd === "lock") {
       lockScreen();
       res("ok");
+      return;
+    }
+    if (cmd === "quit") {
+      stopWallpaper();
+      res("ok");
+      app.quit();
       return;
     }
     res(`unknown request: ${cmd ?? ""}`);

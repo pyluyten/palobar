@@ -5,7 +5,7 @@ import { configService, type PalobarConfig } from "./config";
 let currentProc: Gio.Subprocess | null = null;
 let lastKey = "";
 
-function stopWallpaper() {
+export function stopWallpaper() {
   if (currentProc) {
     try {
       currentProc.force_exit();
