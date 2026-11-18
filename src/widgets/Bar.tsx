@@ -8,6 +8,7 @@ import AstalNotifd from "gi://AstalNotifd";
 import { niri, type NiriWorkspace } from "../services/niri";
 import { popups } from "../services/popups";
 import { toggleLauncher } from "./Launcher";
+import { SysTray } from "./Tray";
 
 function formatGnomeDate(): string {
   const now = new Date();
@@ -164,8 +165,9 @@ export function Bar(gdkmonitor: Gdk.Monitor, index: number) {
           </button>
         </box>
 
-        {/* Right: Notification tray + Network + Volume + Session */}
+        {/* Right: SysTray + Notification tray + Network + Volume + Session */}
         <box $type="end" class="panel-right" spacing={4}>
+          <SysTray />
           <NotificationIndicator />
 
           <button

@@ -86,8 +86,13 @@ window.panel-window {
 }
 
 .system-menu-button image,
-.notifications-button image {
+.notifications-button image,
+.tray-item image {
   -gtk-icon-size: 15px;
+}
+
+.tray-item {
+  padding: 2px 6px;
 }
 
 .notif-badge {
