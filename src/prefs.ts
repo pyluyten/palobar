@@ -1,5 +1,5 @@
 import app from "ags/gtk4/app";
-import { Gtk } from "ags/gtk4";
+import { Gdk, Gtk } from "ags/gtk4";
 import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 import { execAsync } from "ags/process";
@@ -156,7 +156,7 @@ window.prefs-window {
 
 .prefs-footer {
   border-top: 1px solid rgba(0, 0, 0, 0.08);
-  padding: 12px 24px;
+  padding: 6px 24px;
   background-color: #f2f2f4;
 }
 `;
@@ -206,6 +206,22 @@ function makeRow(isLast = false): Gtk.Box {
 
 function buildPrefsWindow() {
   let cfg: PalobarConfig = loadConfig();
+
+  const updateConfig = (next: PalobarConfig) => {
+    cfg = next;
+    saveConfig(cfg);
+  };
+
+  let colorDebounce: number | null = null;
+  const updateConfigDebounced = (next: PalobarConfig) => {
+    cfg = next;
+    if (colorDebounce !== null) GLib.source_remove(colorDebounce);
+    colorDebounce = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 250, () => {
+      colorDebounce = null;
+      saveConfig(cfg);
+      return GLib.SOURCE_REMOVE;
+    });
+  };
 
   const win = new Gtk.Window({
     title: "Palobar Settings",
@@ -265,7 +281,7 @@ function buildPrefsWindow() {
   wpChooseBtn.add_css_class("prefs-btn");
   wpChooseBtn.connect("clicked", () => {
     pickImage(win, (path) => {
-      cfg = { ...cfg, wallpaper: { ...cfg.wallpaper, path } };
+      updateConfig({ ...cfg, wallpaper: { ...cfg.wallpaper, path } });
       wpPathLabel.label = path;
     });
   });
@@ -273,7 +289,7 @@ function buildPrefsWindow() {
   const wpClearBtn = new Gtk.Button({ label: "Clear" });
   wpClearBtn.add_css_class("prefs-btn");
   wpClearBtn.connect("clicked", () => {
-    cfg = { ...cfg, wallpaper: { ...cfg.wallpaper, path: "" } };
+    updateConfig({ ...cfg, wallpaper: { ...cfg.wallpaper, path: "" } });
     wpPathLabel.label = "None (solid color)";
   });
 
@@ -293,7 +309,7 @@ function buildPrefsWindow() {
   modeDropdown.selected = Math.max(0, MODES.indexOf(cfg.wallpaper.mode));
   modeDropdown.connect("notify::selected", () => {
     const mode = MODES[modeDropdown.selected] ?? "fill";
-    cfg = { ...cfg, wallpaper: { ...cfg.wallpaper, mode } };
+    updateConfig({ ...cfg, wallpaper: { ...cfg.wallpaper, mode } });
   });
   wpModeRow.append(wpModeLabel);
   wpModeRow.append(modeDropdown);
@@ -312,7 +328,10 @@ function buildPrefsWindow() {
   });
   wpColorEntry.add_css_class("prefs-entry");
   wpColorEntry.connect("changed", () => {
-    cfg = { ...cfg, wallpaper: { ...cfg.wallpaper, color: wpColorEntry.text } };
+    updateConfigDebounced({
+      ...cfg,
+      wallpaper: { ...cfg.wallpaper, color: wpColorEntry.text },
+    });
   });
   wpColorRow.append(wpColorLabel);
   wpColorRow.append(wpColorEntry);
@@ -364,7 +383,7 @@ function buildPrefsWindow() {
   lockChooseBtn.add_css_class("prefs-btn");
   lockChooseBtn.connect("clicked", () => {
     pickImage(win, (path) => {
-      cfg = { ...cfg, lockscreen: { ...cfg.lockscreen, image: path } };
+      updateConfig({ ...cfg, lockscreen: { ...cfg.lockscreen, image: path } });
       lockPathLabel.label = path;
     });
   });
@@ -372,7 +391,7 @@ function buildPrefsWindow() {
   const lockClearBtn = new Gtk.Button({ label: "Reset" });
   lockClearBtn.add_css_class("prefs-btn");
   lockClearBtn.connect("clicked", () => {
-    cfg = { ...cfg, lockscreen: { ...cfg.lockscreen, image: "" } };
+    updateConfig({ ...cfg, lockscreen: { ...cfg.lockscreen, image: "" } });
     lockPathLabel.label = "Defaults to wallpaper";
   });
 
@@ -394,10 +413,10 @@ function buildPrefsWindow() {
   });
   lockColorEntry.add_css_class("prefs-entry");
   lockColorEntry.connect("changed", () => {
-    cfg = {
+    updateConfigDebounced({
       ...cfg,
       lockscreen: { ...cfg.lockscreen, color: lockColorEntry.text },
-    };
+    });
   });
   lockColorRow.append(lockColorLabel);
   lockColorRow.append(lockColorEntry);
@@ -506,15 +525,18 @@ function buildPrefsWindow() {
   blankDelayRow.sensitive = cfg.power.screenBlankEnabled;
 
   blankSwitch.connect("notify::active", () => {
-    cfg = {
+    updateConfig({
       ...cfg,
       power: { ...cfg.power, screenBlankEnabled: blankSwitch.active },
-    };
+    });
     blankDelayRow.sensitive = blankSwitch.active;
   });
   blankDropdown.connect("notify::selected", () => {
     const minutes = BLANK_DELAYS[blankDropdown.selected]?.minutes ?? 10;
-    cfg = { ...cfg, power: { ...cfg.power, screenBlankMinutes: minutes } };
+    updateConfig({
+      ...cfg,
+      power: { ...cfg.power, screenBlankMinutes: minutes },
+    });
   });
 
   blankDelayRow.append(blankDelayLabel);
@@ -559,15 +581,18 @@ function buildPrefsWindow() {
   suspendDelayRow.sensitive = cfg.power.autoSuspendEnabled;
 
   suspendSwitch.connect("notify::active", () => {
-    cfg = {
+    updateConfig({
       ...cfg,
       power: { ...cfg.power, autoSuspendEnabled: suspendSwitch.active },
-    };
+    });
     suspendDelayRow.sensitive = suspendSwitch.active;
   });
   suspendDropdown.connect("notify::selected", () => {
     const minutes = SUSPEND_DELAYS[suspendDropdown.selected]?.minutes ?? 120;
-    cfg = { ...cfg, power: { ...cfg.power, autoSuspendMinutes: minutes } };
+    updateConfig({
+      ...cfg,
+      power: { ...cfg.power, autoSuspendMinutes: minutes },
+    });
   });
 
   suspendDelayRow.append(suspendDelayLabel);
@@ -665,22 +690,7 @@ function buildPrefsWindow() {
   });
   configNote.add_css_class("prefs-muted");
 
-  const applyBtn = new Gtk.Button({ label: "Save & Apply" });
-  applyBtn.add_css_class("prefs-btn");
-  applyBtn.add_css_class("primary");
-  applyBtn.connect("clicked", () => {
-    saveConfig(cfg);
-  });
-
-  const closeBtn = new Gtk.Button({ label: "Close" });
-  closeBtn.add_css_class("prefs-btn");
-  closeBtn.connect("clicked", () => {
-    win.close();
-  });
-
   footer.append(configNote);
-  footer.append(applyBtn);
-  footer.append(closeBtn);
 
   rightPane.append(pageHeader);
   rightPane.append(stack);
@@ -694,6 +704,19 @@ function buildPrefsWindow() {
   });
   root.append(sidebar);
   root.append(rightPane);
+
+  const keyCtrl = new Gtk.EventControllerKey();
+  keyCtrl.connect("key-pressed", (_ctrl, keyval, _keycode, state) => {
+    if (
+      (state & Gdk.ModifierType.CONTROL_MASK) !== 0 &&
+      (keyval === Gdk.KEY_q || keyval === Gdk.KEY_Q)
+    ) {
+      win.close();
+      return true;
+    }
+    return false;
+  });
+  win.add_controller(keyCtrl);
 
   win.set_child(root);
   win.connect("close-request", () => {
