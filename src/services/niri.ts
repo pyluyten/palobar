@@ -172,7 +172,6 @@ class NiriService {
           is_open: boolean;
         };
         this.overviewOpen = Boolean(payload.is_open);
-        console.log("[niri] OverviewOpenedOrClosed:", this.overviewOpen);
         this.emitOverview();
       }
     } catch (err) {

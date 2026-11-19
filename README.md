@@ -1,6 +1,6 @@
 palobar is a cheap clone of GNOME visual style for niri
 
-![panel][screenshot/top-bar.png]
+![panel](screenshot/top-bar.png)
 
 * `palobar` to run
 * `palobar-prefs`
@@ -13,7 +13,7 @@ palobar is a cheap clone of GNOME visual style for niri
 | top bar | ok + systray |
 | top bar right panel | missing btooth & various |
 | dock | nope, but not sure i want ? |
-| overview | OK done |
+| overview launcher | OK done |
 
 | gnome-settings | palobar |
 | - | - |
