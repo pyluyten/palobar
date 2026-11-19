@@ -19,10 +19,22 @@ and will gradually do some prefs
 It is typescript and depends on ags astal.
 The project is too young to describe installation which is likely a mess.
 
-* `palobar` to run
-* `palobar-prefs`
+# Features
+
+* `palobar` imitates gnome-panel + launcher
+* `palobar-prefs` imitates gnome-control-center
+* `palobar-ctl toggle-launcher` to activate launcher independantly from overwiew
+* `palobar-run-command` will use niri spawn-sh to run anything. Include palobar.
 * `palobar-ctl quit`
-* `palobar-ctl toggle-launcher`
 
 
 See [TODO](TODO.md) for things i may add.
+
+## Niri overview
+
+Like GNOME : 
+* a search entry appears
+* a dock appears, allows to click on app
+* if user types, apps appear.
+
+
