@@ -8,6 +8,7 @@ import { NotificationToasts } from "./widgets/NotificationToasts";
 import { toggleLauncher } from "./widgets/Launcher";
 import { initOverviewCapture } from "./widgets/OverviewCapture";
 import { initWallpaperService, stopWallpaper } from "./services/wallpaper";
+import { initPowerService, stopPowerService } from "./services/power";
 import { lockScreen } from "./services/lockscreen";
 
 app.start({
@@ -26,6 +27,7 @@ app.start({
     }
     if (cmd === "quit") {
       stopWallpaper();
+      stopPowerService();
       res("ok");
       app.quit();
       return;
@@ -34,6 +36,7 @@ app.start({
   },
   main() {
     initWallpaperService();
+    initPowerService();
     initOverviewCapture();
 
     const monitors = app.get_monitors();

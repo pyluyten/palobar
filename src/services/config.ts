@@ -13,6 +13,12 @@ export interface PalobarConfig {
     image: string;
     color: string;
   };
+  power: {
+    screenBlankEnabled: boolean;
+    screenBlankMinutes: number;
+    autoSuspendEnabled: boolean;
+    autoSuspendMinutes: number;
+  };
 }
 
 export const DEFAULT_CONFIG: PalobarConfig = {
@@ -24,6 +30,12 @@ export const DEFAULT_CONFIG: PalobarConfig = {
   lockscreen: {
     image: "",
     color: "#131316",
+  },
+  power: {
+    screenBlankEnabled: true,
+    screenBlankMinutes: 10,
+    autoSuspendEnabled: false,
+    autoSuspendMinutes: 120,
   },
 };
 
@@ -42,6 +54,10 @@ function mergeConfig(raw: Partial<PalobarConfig>): PalobarConfig {
     lockscreen: {
       ...DEFAULT_CONFIG.lockscreen,
       ...(raw.lockscreen ?? {}),
+    },
+    power: {
+      ...DEFAULT_CONFIG.power,
+      ...(raw.power ?? {}),
     },
   };
 }

@@ -2,13 +2,18 @@ TODO
 ____
 
 
+Note : 
+env XDG_CURRENT_DESKTOP=GNOME gnome-control-center --verbose
+
 * Top Panel
-    - notification tray
-    - media player
-    - UI : activites button
-    - UI : workspace button
+    - [x] notification tray
+    - [ ] media player
+    - [ ] activities (removed)
+    - [x] workspace button
 * Launcher
-* Command launcher
+    - [ ] entry bar?
+    - [ ] dock ?
+* [ ] Command launcher
 * Settings
     - wallpaper
     - lockscreen

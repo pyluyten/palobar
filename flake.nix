@@ -53,6 +53,7 @@
           pkgs.dart-sass
           pkgs.swaybg
           pkgs.swaylock
+          pkgs.swayidle
           pkgs.networkmanager
         ]
         ++ astalDeps;
@@ -70,7 +71,7 @@
 
         wrapProgram $out/bin/palobar \
           --prefix PATH : $out/bin \
-          --prefix PATH : ${pkgs.lib.makeBinPath [pkgs.swaybg pkgs.swaylock pkgs.networkmanager]}
+          --prefix PATH : ${pkgs.lib.makeBinPath [pkgs.swaybg pkgs.swaylock pkgs.swayidle pkgs.networkmanager]}
 
         cat > $out/bin/palobar-ctl <<EOF
         #!${pkgs.runtimeShell}
@@ -92,6 +93,7 @@
         pkgs.dart-sass
         pkgs.swaybg
         pkgs.swaylock
+        pkgs.swayidle
       ];
     };
   };
