@@ -43,6 +43,7 @@ app.start({
         .qs-circle-btn.active,
         .qs-chevron-btn.active,
         .qs-toggle-pill.active,
+        .qs-mini-pill.active,
         .qs-slider highlight,
         .notif-dnd-btn.active {
           background-color: ${accent};

@@ -5,8 +5,10 @@ import { execAsync } from "ags/process";
 import GLib from "gi://GLib";
 import AstalWp from "gi://AstalWp";
 import AstalNetwork from "gi://AstalNetwork";
+import AstalNotifd from "gi://AstalNotifd";
 import { popups } from "../services/popups";
 import { lockScreen } from "../services/lockscreen";
+import { configService, saveConfig } from "../services/config";
 
 function runSessionCmd(cmd: string[]) {
   popups.close();
@@ -177,6 +179,66 @@ function NetworkSection() {
   );
 }
 
+function QuickTogglesSection() {
+  const notifd = AstalNotifd.get_default();
+  const [dnd, setDnd] = createState(notifd.dontDisturb);
+  notifd.connect("notify::dont-disturb", () => setDnd(notifd.dontDisturb));
+
+  const [darkMode, setDarkMode] = createState(
+    configService.get().appearance.colorScheme === "dark",
+  );
+  configService.subscribe((cfg) => {
+    setDarkMode(cfg.appearance.colorScheme === "dark");
+  });
+
+  return (
+    <box class="qs-mini-toggles" spacing={8} homogeneous>
+      <button
+        class={`qs-mini-pill ${darkMode((d) => (d ? "active" : ""))}`}
+        onClicked={() => {
+          const current = configService.get();
+          const nextScheme =
+            current.appearance.colorScheme === "dark" ? "default" : "dark";
+          saveConfig({
+            ...current,
+            appearance: { ...current.appearance, colorScheme: nextScheme },
+          });
+          execAsync([
+            "gsettings",
+            "set",
+            "org.gnome.desktop.interface",
+            "color-scheme",
+            nextScheme === "dark" ? "prefer-dark" : "default",
+          ]).catch(() => {});
+        }}
+      >
+        <box spacing={8} halign={Gtk.Align.START}>
+          <image iconName="weather-clear-night-symbolic" />
+          <label label="Dark Style" />
+        </box>
+      </button>
+
+      <button
+        class={`qs-mini-pill ${dnd((d) => (d ? "active" : ""))}`}
+        onClicked={() => {
+          notifd.dontDisturb = !notifd.dontDisturb;
+        }}
+      >
+        <box spacing={8} halign={Gtk.Align.START}>
+          <image
+            iconName={dnd((d) =>
+              d
+                ? "notifications-disabled-symbolic"
+                : "preferences-system-notifications-symbolic",
+            )}
+          />
+          <label label="Do Not Disturb" />
+        </box>
+      </button>
+    </box>
+  );
+}
+
 export function QuickSettings(gdkmonitor: Gdk.Monitor) {
   const { TOP, RIGHT } = Astal.WindowAnchor;
   const [showPowerMenu, setShowPowerMenu] = createState(false);
@@ -209,14 +271,23 @@ export function QuickSettings(gdkmonitor: Gdk.Monitor) {
         orientation={Gtk.Orientation.VERTICAL}
         spacing={14}
       >
-        {/* Header: Lock & Power Menu */}
+        {/* Header: Screenshot & Settings on left, Lock & Power on right */}
         <box class="qs-header" spacing={8}>
-          <label
-            class="qs-title"
-            hexpand
-            halign={Gtk.Align.START}
-            label="Quick Settings"
-          />
+          <button
+            class="qs-circle-btn"
+            tooltipText="Screenshot"
+            onClicked={() => {
+              popups.close();
+              GLib.timeout_add(GLib.PRIORITY_DEFAULT, 150, () => {
+                execAsync(["niri", "msg", "action", "screenshot"]).catch(
+                  (err) => console.error("[screenshot] failed:", err),
+                );
+                return GLib.SOURCE_REMOVE;
+              });
+            }}
+          >
+            <image iconName="applets-screenshooter-symbolic" />
+          </button>
 
           <button
             class="qs-circle-btn"
@@ -240,6 +311,8 @@ export function QuickSettings(gdkmonitor: Gdk.Monitor) {
           >
             <image iconName="preferences-system-symbolic" />
           </button>
+
+          <box hexpand />
 
           <button
             class="qs-circle-btn"
@@ -310,6 +383,7 @@ export function QuickSettings(gdkmonitor: Gdk.Monitor) {
 
         <VolumeSection />
         <NetworkSection />
+        <QuickTogglesSection />
       </box>
     </window>
   );

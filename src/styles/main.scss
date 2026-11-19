@@ -226,6 +226,26 @@ window.panel-window {
   }
 }
 
+.qs-mini-pill {
+  background-color: $card-bg;
+  background-image: none;
+  box-shadow: none;
+  border: none;
+  border-radius: 999px;
+  padding: 10px 14px;
+  color: $panel-fg;
+  font-weight: 600;
+  transition: background-color 150ms ease;
+
+  &:hover {
+    background-color: $card-hover;
+  }
+
+  &.active {
+    background-color: $accent;
+  }
+}
+
 .qs-toggle-title {
   font-weight: 700;
   font-size: 13.5px;

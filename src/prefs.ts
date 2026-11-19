@@ -45,7 +45,7 @@ function buildPrefsWindow() {
   Gtk.StyleContext.add_provider_for_display(
     Gdk.Display.get_default()!,
     accentProvider,
-    Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+    Gtk.STYLE_PROVIDER_PRIORITY_USER + 10,
   );
 
   const syncAppearance = () => {

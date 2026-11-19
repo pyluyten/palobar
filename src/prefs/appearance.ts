@@ -167,14 +167,16 @@ export function buildAppearancePage(
   const dotCss = ACCENT_COLORS.map(
     (c, idx) => `
     .accent-dot-${idx} { background-color: ${c.hex}; }
-    .accent-btn-${idx}.selected { border-color: ${c.hex}; }
+    button.prefs-accent-btn.accent-btn-${idx}.selected {
+      border: 2.5px solid ${c.hex};
+    }
   `,
   ).join("\n");
   accentProvider.load_from_string(dotCss);
   Gtk.StyleContext.add_provider_for_display(
     Gdk.Display.get_default()!,
     accentProvider,
-    Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+    Gtk.STYLE_PROVIDER_PRIORITY_USER + 10,
   );
 
   const accentButtons: Array<{ hex: string; btn: Gtk.Button }> = [];
@@ -190,11 +192,23 @@ export function buildAppearancePage(
   };
 
   ACCENT_COLORS.forEach((c, idx) => {
-    const btn = new Gtk.Button({ tooltip_text: c.name });
+    const btn = new Gtk.Button({
+      tooltip_text: c.name,
+      width_request: 34,
+      height_request: 34,
+      halign: Gtk.Align.CENTER,
+      valign: Gtk.Align.CENTER,
+    });
     btn.add_css_class("prefs-accent-btn");
     btn.add_css_class(`accent-btn-${idx}`);
 
-    const dot = new Gtk.Box();
+    const dot = new Gtk.Box({
+      width_request: 24,
+      height_request: 24,
+      halign: Gtk.Align.CENTER,
+      valign: Gtk.Align.CENTER,
+      can_target: false,
+    });
     dot.add_css_class("prefs-accent-dot");
     dot.add_css_class(`accent-dot-${idx}`);
     btn.set_child(dot);
