@@ -2,6 +2,14 @@ import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 import { execAsync } from "ags/process";
 
+export interface NiriWindow {
+  id: number;
+  title: string | null;
+  app_id: string | null;
+  workspace_id: number | null;
+  is_focused: boolean;
+}
+
 export interface NiriWorkspace {
   id: number;
   idx: number;
@@ -98,6 +106,20 @@ class NiriService {
       await execAsync(["niri", "msg", "action", action, ...args]);
     } catch (err) {
       console.error(`[niri] failed action ${action}:`, err);
+    }
+  }
+
+  async focusWindow(id: number) {
+    await this.sendAction("focus-window", "--id", String(id));
+  }
+
+  async getWindows(): Promise<NiriWindow[]> {
+    try {
+      const out = await execAsync(["niri", "msg", "-j", "windows"]);
+      return JSON.parse(out) as NiriWindow[];
+    } catch (err) {
+      console.error("[niri] failed to fetch windows:", err);
+      return [];
     }
   }
 
