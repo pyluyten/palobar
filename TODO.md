@@ -1,21 +1,50 @@
 TODO
 ____
 
-
-Note : 
-env XDG_CURRENT_DESKTOP=GNOME gnome-control-center --verbose
+## about top bar
 
 * Top Panel
     - [x] notification tray
     - [ ] media player
-    - [ ] activities (removed)
     - [x] workspace button
+    - [ ] clipboard+
+    - [ ] power profile
+    - [ ] dark, light
+    - [ ] night mode
+    - [ ] vpn
+    - [ ] screenshot (region)
+    - [ ] bluetooth
+    - [ ] battery
 * Launcher
-    - [ ] entry bar?
-    - [ ] dock ?
+    - [ ] text entry
+    - [ ] dock
+    - [ ] pages
 * [ ] Command launcher
-* Settings
-    - wallpaper
-    - lockscreen
-        + [ ] basics
-        + [ ] text entry
+
+
+## about settings
+
+`env XDG_CURRENT_DESKTOP=GNOME gnome-control-center` to run it and use it or compare.
+
+| gnome-settings | palobar |
+| - | - |
+| wifi | todo. |
+| network | todo. |
+| bluetooth | todo. |
+| screens | BELONGS TO NIRI. |
+| sound | todo. IMPORTANT. |
+| energy | todo |
+| multi task | BELONGS TO NIRI. |
+| appearance | todo |
+| notifi | todo |
+| research | todo |
+| accounts | todo |
+| share | todo |
+| wellbeing | todo |
+| mouse | todo |
+| keyb | todo |
+| colors | todo |
+| printers | todo |
+| accessibilty | todo |
+| private | todo |
+| system | todo |
