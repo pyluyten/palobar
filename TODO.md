@@ -48,3 +48,9 @@ ____
 | accessibilty | todo |
 | private | todo |
 | system | todo |
+
+
+## Meta
+
+- Be easy to install
+- Plugins, like which-key
