@@ -49,13 +49,71 @@ function collectPathExecutables(): string[] {
   return [...seen].sort((a, b) => a.localeCompare(b));
 }
 
-function executeCommand(cmd: string) {
+function findTerminal(): { bin: string; flag: string | null } | null {
+  if (GLib.find_program_in_path("xdg-terminal-exec")) {
+    return { bin: "xdg-terminal-exec", flag: null };
+  }
+  const envTerm = GLib.getenv("TERMINAL");
+  if (envTerm && GLib.find_program_in_path(envTerm)) {
+    return { bin: envTerm, flag: envTerm === "gnome-terminal" ? "--" : "-e" };
+  }
+  const candidates = [
+    "ghostty",
+    "kitty",
+    "alacritty",
+    "foot",
+    "wezterm",
+    "ptyxis",
+    "kgx",
+    "gnome-terminal",
+    "xterm",
+  ];
+  for (const term of candidates) {
+    if (GLib.find_program_in_path(term)) {
+      return { bin: term, flag: term === "gnome-terminal" ? "--" : "-e" };
+    }
+  }
+  return null;
+}
+
+function executeCommand(cmd: string, inTerminal = false) {
   const trimmed = cmd.trim();
   if (!trimmed) return;
+
+  let argv: string[];
+  if (inTerminal) {
+    const term = findTerminal();
+    if (term) {
+      argv = term.flag
+        ? [
+            "niri",
+            "msg",
+            "action",
+            "spawn",
+            "--",
+            term.bin,
+            term.flag,
+            "sh",
+            "-c",
+            trimmed,
+          ]
+        : ["niri", "msg", "action", "spawn", "--", term.bin, "sh", "-c", trimmed];
+    } else {
+      argv = ["niri", "msg", "action", "spawn", "--", "sh", "-c", trimmed];
+    }
+  } else {
+    argv = ["niri", "msg", "action", "spawn", "--", "sh", "-c", trimmed];
+  }
+
   try {
-    Gio.Subprocess.new(["sh", "-c", trimmed], Gio.SubprocessFlags.NONE);
+    Gio.Subprocess.new(argv, Gio.SubprocessFlags.NONE);
   } catch (err) {
-    console.error("[run-command] failed to execute:", trimmed, err);
+    console.error("[run-command] niri spawn failed, falling back:", err);
+    try {
+      Gio.Subprocess.new(["sh", "-c", trimmed], Gio.SubprocessFlags.NONE);
+    } catch (err2) {
+      console.error("[run-command] failed to execute:", trimmed, err2);
+    }
   }
 }
 
@@ -81,7 +139,7 @@ export function toggleRunCommand(
   let selectedIndex = 0;
 
   const entry = new Gtk.Entry({
-    placeholder_text: "Run a command...",
+    placeholder_text: "Run a command... (Ctrl+Enter for terminal)",
     primary_icon_name: "utilities-terminal-symbolic",
     halign: Gtk.Align.CENTER,
     width_request: 440,
@@ -172,7 +230,17 @@ export function toggleRunCommand(
   });
 
   const entryKeyCtrl = new Gtk.EventControllerKey();
-  entryKeyCtrl.connect("key-pressed", (_ctrl, keyval) => {
+  entryKeyCtrl.connect("key-pressed", (_ctrl, keyval, _keycode, state) => {
+    if (
+      (keyval === Gdk.KEY_Return || keyval === Gdk.KEY_KP_Enter) &&
+      (state & Gdk.ModifierType.CONTROL_MASK) !== 0
+    ) {
+      const text = entry.text.trim();
+      if (!text) return true;
+      closeRunCommand();
+      executeCommand(text, true);
+      return true;
+    }
     if (keyval === Gdk.KEY_Tab && matches.length > 0) {
       const chosen = matches[selectedIndex] ?? matches[0];
       if (chosen) {
