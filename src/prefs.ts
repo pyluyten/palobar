@@ -228,7 +228,6 @@ function buildPrefsWindow() {
     title: "Palobar Settings",
     default_width: 740,
     default_height: 480,
-    resizable: false,
   });
   win.add_css_class("prefs-window");
 
