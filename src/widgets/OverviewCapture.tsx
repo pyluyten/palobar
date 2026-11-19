@@ -1,5 +1,8 @@
 import app from "ags/gtk4/app";
 import { Astal, Gdk, Gtk } from "ags/gtk4";
+import { execAsync } from "ags/process";
+import Cairo from "gi://cairo";
+import GLib from "gi://GLib";
 import { niri } from "../services/niri";
 import { popups } from "../services/popups";
 import {
@@ -37,6 +40,14 @@ function isTypingKey(keyval: number, state: number): string | null {
 function createCaptureWindow(monitor: Gdk.Monitor, index: number): Gtk.Window {
   const { TOP, LEFT } = Astal.WindowAnchor;
 
+  const entry = new Gtk.Entry({
+    width_request: 1,
+    height_request: 1,
+    halign: Gtk.Align.START,
+    valign: Gtk.Align.START,
+    opacity: 0,
+  });
+
   const win = (
     <window
       visible
@@ -47,17 +58,17 @@ function createCaptureWindow(monitor: Gdk.Monitor, index: number): Gtk.Window {
       exclusivity={Astal.Exclusivity.IGNORE}
       keymode={Astal.Keymode.EXCLUSIVE}
       anchor={TOP | LEFT}
-      widthRequest={1}
-      heightRequest={1}
-      canTarget={false}
       application={app}
     >
-      <box widthRequest={1} heightRequest={1} />
+      {entry}
     </window>
   ) as Gtk.Window;
 
-  const keyCtrl = new Gtk.EventControllerKey();
+  const keyCtrl = new Gtk.EventControllerKey({
+    propagation_phase: Gtk.PropagationPhase.CAPTURE,
+  });
   keyCtrl.connect("key-pressed", (_ctrl, keyval, _keycode, state) => {
+    console.log("[overview-capture] key-pressed:", keyval, state);
     if (
       keyval === Gdk.KEY_Escape ||
       keyval === Gdk.KEY_Return ||
@@ -94,7 +105,32 @@ function createCaptureWindow(monitor: Gdk.Monitor, index: number): Gtk.Window {
     return true;
   });
 
+  win.connect("realize", () => {
+    const surface = win.get_surface();
+    if (surface) {
+      surface.set_input_region(new Cairo.Region());
+    }
+  });
+
+  win.connect("notify::is-active", () => {
+    console.log("[overview-capture] win.is_active:", win.is_active);
+  });
+
   win.add_controller(keyCtrl);
+  GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+    const surface = win.get_surface();
+    if (surface) {
+      surface.set_input_region(new Cairo.Region());
+    }
+    const ok = entry.grab_focus();
+    console.log(
+      "[overview-capture] entry.grab_focus():",
+      ok,
+      "is_active:",
+      win.is_active,
+    );
+    return GLib.SOURCE_REMOVE;
+  });
   return win;
 }
 
@@ -115,6 +151,17 @@ function syncCapture() {
   const shouldCapture =
     overviewOpen && !isLauncherOpen() && popups.active.get() === null;
 
+  console.log(
+    "[overview-capture] syncCapture overviewOpen=",
+    overviewOpen,
+    "shouldCapture=",
+    shouldCapture,
+    "is launcher opened=",
+    isLauncherOpen(),
+    "popups.active=",
+    popups.active.get(),
+  );
+
   if (!shouldCapture) {
     destroyCaptureWindows();
     return;
@@ -124,6 +171,13 @@ function syncCapture() {
 
   const monitors = app.get_monitors();
   captureWindows = monitors.map((m, idx) => createCaptureWindow(m, idx));
+
+  GLib.timeout_add(GLib.PRIORITY_DEFAULT, 300, () => {
+    execAsync(["niri", "msg", "-j", "layers"])
+      .then((out) => console.log("[overview-capture] layers:", out))
+      .catch((err) => console.error("[overview-capture] layers err:", err));
+    return GLib.SOURCE_REMOVE;
+  });
 }
 
 export function initOverviewCapture() {

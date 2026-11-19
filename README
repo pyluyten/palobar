@@ -2,6 +2,11 @@ palobar is a cheap clone of GNOME visual style for niri
 
 ![panel][screenshot/top-bar.png]
 
+* `palobar` to run
+* `palobar-prefs`
+* `palobar-ctl quit`
+* `palobar-ctl toggle-launcher`
+
 
 | component | palobar |
 | - | - |
