@@ -1,5 +1,6 @@
 import app from "ags/gtk4/app";
 import { Astal, Gdk, Gtk } from "ags/gtk4";
+import { execAsync } from "ags/process";
 import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 import { popups } from "../services/popups";
@@ -76,9 +77,13 @@ function findTerminal(): { bin: string; flag: string | null } | null {
   return null;
 }
 
-function executeCommand(cmd: string, inTerminal = false) {
+async function executeCommand(cmd: string, inTerminal = false) {
   const trimmed = cmd.trim();
   if (!trimmed) return;
+
+  if (runWindow) {
+    runWindow.set_visible(false);
+  }
 
   let argv: string[];
   if (inTerminal) {
@@ -97,23 +102,30 @@ function executeCommand(cmd: string, inTerminal = false) {
             "-c",
             trimmed,
           ]
-        : ["niri", "msg", "action", "spawn", "--", term.bin, "sh", "-c", trimmed];
+        : [
+            "niri",
+            "msg",
+            "action",
+            "spawn",
+            "--",
+            term.bin,
+            "sh",
+            "-c",
+            trimmed,
+          ];
     } else {
-      argv = ["niri", "msg", "action", "spawn", "--", "sh", "-c", trimmed];
+      argv = ["niri", "msg", "action", "spawn-sh", "--", trimmed];
     }
   } else {
-    argv = ["niri", "msg", "action", "spawn", "--", "sh", "-c", trimmed];
+    argv = ["niri", "msg", "action", "spawn-sh", "--", trimmed];
   }
 
   try {
-    Gio.Subprocess.new(argv, Gio.SubprocessFlags.NONE);
+    await execAsync(argv);
   } catch (err) {
-    console.error("[run-command] niri spawn failed, falling back:", err);
-    try {
-      Gio.Subprocess.new(["sh", "-c", trimmed], Gio.SubprocessFlags.NONE);
-    } catch (err2) {
-      console.error("[run-command] failed to execute:", trimmed, err2);
-    }
+    console.error("[run-command] niri spawn failed:", err);
+  } finally {
+    closeRunCommand();
   }
 }
 
@@ -213,7 +225,6 @@ export function toggleRunCommand(
   listBox.connect("row-activated", (_box, row) => {
     const cmd = matches[row.get_index()];
     if (cmd) {
-      closeRunCommand();
       executeCommand(cmd);
     }
   });
@@ -225,7 +236,6 @@ export function toggleRunCommand(
   entry.connect("activate", () => {
     const text = entry.text.trim();
     if (!text) return;
-    closeRunCommand();
     executeCommand(text);
   });
 
@@ -237,7 +247,6 @@ export function toggleRunCommand(
     ) {
       const text = entry.text.trim();
       if (!text) return true;
-      closeRunCommand();
       executeCommand(text, true);
       return true;
     }
