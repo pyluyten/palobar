@@ -1,6 +1,18 @@
 palobar is a cheap clone of GNOME visual style for niri
 
-![panel](screenshot/top-bar.png)
+I am copying top bar
+![bar](screenshot/top-bar.png)
+
+and partly its components
+![panel](screenshot/right-panel.png)
+
+while in niri overview mode, typing triggers the launcher
+![launcher](screenshot/launcher.png)
+
+and will gradually do some prefs
+![prefs](screenshot/prefs.png)
+
+It is typescript and depends on ags astal.
 
 * `palobar` to run
 * `palobar-prefs`
