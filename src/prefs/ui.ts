@@ -136,6 +136,162 @@ window.prefs-window {
   padding: 6px 24px;
   background-color: #f2f2f4;
 }
+
+/* Appearance: Style cards */
+.prefs-style-card {
+  background: transparent;
+  background-image: none;
+  box-shadow: none;
+  border: 2px solid transparent;
+  border-radius: 14px;
+  padding: 6px;
+}
+
+.prefs-style-card:hover .prefs-style-preview {
+  border-color: rgba(0, 0, 0, 0.25);
+}
+
+.prefs-style-card.selected {
+  border-color: #3584e4;
+}
+
+.prefs-style-preview {
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  min-width: 152px;
+  min-height: 92px;
+  padding: 12px;
+  background: linear-gradient(135deg, #1c71d8, #1a5fb4);
+}
+
+.prefs-mockup-back {
+  background-color: #242428;
+  border-radius: 7px;
+  min-width: 78px;
+  min-height: 52px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.prefs-mockup-front.light {
+  background-color: #ffffff;
+  border-radius: 7px;
+  min-width: 78px;
+  min-height: 52px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+}
+
+.prefs-mockup-front.dark {
+  background-color: #2c2c32;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  min-width: 78px;
+  min-height: 52px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
+}
+
+.prefs-style-label {
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 6px;
+}
+
+/* Accent Color circles */
+.prefs-accent-btn {
+  background: transparent;
+  background-image: none;
+  box-shadow: none;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  padding: 3px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.prefs-accent-dot {
+  min-width: 24px;
+  min-height: 24px;
+  border-radius: 999px;
+}
+
+/* Wallpaper Preview */
+.prefs-wp-preview {
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  min-width: 220px;
+  min-height: 124px;
+}
+
+/* Dark theme for prefs window */
+window.prefs-window.dark {
+  background-color: #1c1c20;
+  color: #f6f5f4;
+}
+
+window.prefs-window.dark .prefs-sidebar {
+  background-color: #242429;
+  border-right-color: rgba(255, 255, 255, 0.08);
+}
+
+window.prefs-window.dark .prefs-sidebar-title,
+window.prefs-window.dark .prefs-page-header,
+window.prefs-window.dark .prefs-group-title,
+window.prefs-window.dark .prefs-row-title {
+  color: #f6f5f4;
+}
+
+window.prefs-window.dark .prefs-nav-btn {
+  color: rgba(246, 245, 244, 0.85);
+}
+
+window.prefs-window.dark .prefs-nav-btn:hover {
+  background-color: rgba(255, 255, 255, 0.07);
+}
+
+window.prefs-window.dark .prefs-nav-btn.active {
+  background-color: rgba(255, 255, 255, 0.13);
+  color: #ffffff;
+}
+
+window.prefs-window.dark .prefs-content-pane {
+  background-color: #1c1c20;
+}
+
+window.prefs-window.dark .prefs-group {
+  background-color: #28282e;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+window.prefs-window.dark .prefs-row {
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+
+window.prefs-window.dark .prefs-muted {
+  color: rgba(246, 245, 244, 0.62);
+}
+
+window.prefs-window.dark .prefs-btn {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #f6f5f4;
+}
+
+window.prefs-window.dark .prefs-btn:hover {
+  background-color: rgba(255, 255, 255, 0.16);
+}
+
+window.prefs-window.dark .prefs-entry {
+  background-color: rgba(0, 0, 0, 0.25);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #f6f5f4;
+}
+
+window.prefs-window.dark .prefs-footer {
+  background-color: #202025;
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+window.prefs-window.dark .prefs-wp-preview {
+  border-color: rgba(255, 255, 255, 0.12);
+}
 `;
 
 export function pickImage(

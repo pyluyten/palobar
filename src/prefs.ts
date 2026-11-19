@@ -37,9 +37,29 @@ function buildPrefsWindow() {
   const win = new Gtk.Window({
     title: "Palobar Settings",
     default_width: 740,
-    default_height: 480,
+    default_height: 540,
   });
   win.add_css_class("prefs-window");
+
+  const accentProvider = new Gtk.CssProvider();
+  Gtk.StyleContext.add_provider_for_display(
+    Gdk.Display.get_default()!,
+    accentProvider,
+    Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+  );
+
+  const syncAppearance = () => {
+    const current = ctx.getConfig();
+    if (current.appearance.colorScheme === "dark") {
+      win.add_css_class("dark");
+    } else {
+      win.remove_css_class("dark");
+    }
+    accentProvider.load_from_string(`
+      .prefs-style-card.selected { border-color: ${current.appearance.accentColor}; }
+    `);
+  };
+  syncAppearance();
 
   const stack = new Gtk.Stack({
     transition_type: Gtk.StackTransitionType.CROSSFADE,
@@ -50,7 +70,7 @@ function buildPrefsWindow() {
 
   stack.add_named(buildSoundPage(), "sound");
   stack.add_named(buildPowerPage(ctx), "power");
-  stack.add_named(buildAppearancePage(win, ctx), "appearance");
+  stack.add_named(buildAppearancePage(win, ctx, syncAppearance), "appearance");
   stack.add_named(buildSecurityPage(win, ctx), "security");
 
   // --- Left Sidebar ---

@@ -2,8 +2,13 @@ import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 
 export type WallpaperMode = "fill" | "fit" | "stretch" | "center" | "tile";
+export type ColorScheme = "default" | "dark";
 
 export interface PalobarConfig {
+  appearance: {
+    colorScheme: ColorScheme;
+    accentColor: string;
+  };
   wallpaper: {
     path: string;
     mode: WallpaperMode;
@@ -22,6 +27,10 @@ export interface PalobarConfig {
 }
 
 export const DEFAULT_CONFIG: PalobarConfig = {
+  appearance: {
+    colorScheme: "default",
+    accentColor: "#3584e4",
+  },
   wallpaper: {
     path: "",
     mode: "fill",
@@ -47,6 +56,10 @@ export const CONFIG_PATH = GLib.build_filenamev([CONFIG_DIR, "config.json"]);
 
 function mergeConfig(raw: Partial<PalobarConfig>): PalobarConfig {
   return {
+    appearance: {
+      ...DEFAULT_CONFIG.appearance,
+      ...(raw.appearance ?? {}),
+    },
     wallpaper: {
       ...DEFAULT_CONFIG.wallpaper,
       ...(raw.wallpaper ?? {}),

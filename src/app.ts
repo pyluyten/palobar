@@ -9,6 +9,7 @@ import { toggleLauncher } from "./widgets/Launcher";
 import { initOverviewCapture } from "./widgets/OverviewCapture";
 import { initWallpaperService, stopWallpaper } from "./services/wallpaper";
 import { initPowerService, stopPowerService } from "./services/power";
+import { configService } from "./services/config";
 import { lockScreen } from "./services/lockscreen";
 
 app.start({
@@ -35,6 +36,23 @@ app.start({
     res(`unknown request: ${cmd ?? ""}`);
   },
   main() {
+    configService.subscribe((cfg) => {
+      const accent = cfg.appearance.accentColor || "#3584e4";
+      app.apply_css(`
+        .notif-badge,
+        .qs-circle-btn.active,
+        .qs-chevron-btn.active,
+        .qs-toggle-pill.active,
+        .qs-slider highlight,
+        .notif-dnd-btn.active {
+          background-color: ${accent};
+        }
+        .launcher-search:focus {
+          border-color: ${accent};
+        }
+      `);
+    });
+
     initWallpaperService();
     initPowerService();
     initOverviewCapture();
