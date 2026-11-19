@@ -65,12 +65,12 @@
         mkdir -p $out/bin
 
         ags bundle src/prefs.ts $out/bin/palobar-prefs
-        ags bundle src/app.ts $out/bin/palobar
+        ags bundle src/app.ts $out/bin/.palobar-bin
 
         wrapProgram $out/bin/palobar-prefs \
           --prefix PATH : ${pkgs.lib.makeBinPath [pkgs.swaylock]}
 
-        wrapProgram $out/bin/palobar \
+        wrapProgram $out/bin/.palobar-bin \
           --prefix PATH : $out/bin \
           --prefix PATH : ${pkgs.lib.makeBinPath [pkgs.swaybg pkgs.swaylock pkgs.swayidle pkgs.networkmanager]}
 
@@ -79,6 +79,16 @@
         exec ${agsWithDeps}/bin/ags request "\$@"
         EOF
         chmod +x $out/bin/palobar-ctl
+
+        cat > $out/bin/palobar <<EOF
+        #!${pkgs.runtimeShell}
+        if [ "\''${1:-}" = "ctl" ]; then
+          shift
+          exec $out/bin/palobar-ctl "\$@"
+        fi
+        exec $out/bin/.palobar-bin "\$@"
+        EOF
+        chmod +x $out/bin/palobar
 
         runHook postInstall
       '';

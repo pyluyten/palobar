@@ -6,6 +6,7 @@ import { QuickSettings } from "./widgets/QuickSettings";
 import { NotificationsPopup } from "./widgets/NotificationsPopup";
 import { NotificationToasts } from "./widgets/NotificationToasts";
 import { toggleLauncher } from "./widgets/Launcher";
+import { toggleRunCommand } from "./widgets/RunCommand";
 import { initOverviewCapture } from "./widgets/OverviewCapture";
 import { initWallpaperService, stopWallpaper } from "./services/wallpaper";
 import { initPowerService, stopPowerService } from "./services/power";
@@ -18,6 +19,11 @@ app.start({
     const cmd = request[0];
     if (cmd === "toggle-launcher" || cmd === "launcher") {
       toggleLauncher();
+      res("ok");
+      return;
+    }
+    if (cmd === "run-command") {
+      toggleRunCommand();
       res("ok");
       return;
     }

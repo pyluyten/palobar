@@ -1,9 +1,11 @@
 import app from "ags/gtk4/app";
 import { Astal, Gdk, Gtk } from "ags/gtk4";
+import AstalApps from "gi://AstalApps";
 import Cairo from "gi://cairo";
 import GLib from "gi://GLib";
 import { niri } from "../services/niri";
 import { popups } from "../services/popups";
+import { createMiniDock } from "./Dock";
 import {
   closeLauncher,
   isLauncherOpen,
@@ -36,16 +38,69 @@ function isTypingKey(keyval: number, state: number): string | null {
   return String.fromCodePoint(codepoint);
 }
 
-function createCaptureWindow(monitor: Gdk.Monitor, index: number): Gtk.Window {
-  const { TOP, LEFT } = Astal.WindowAnchor;
+function updateInputRegion(win: Gtk.Window, widgets: Gtk.Widget[]) {
+  const surface = win.get_surface();
+  if (!surface) return;
 
-  const entry = new Gtk.Entry({
-    width_request: 1,
-    height_request: 1,
-    halign: Gtk.Align.START,
+  const region = new Cairo.Region();
+  for (const w of widgets) {
+    if (!w.get_visible()) continue;
+    const [ok, bounds] = w.compute_bounds(win);
+    if (!ok) continue;
+    region.unionRectangle({
+      x: Math.floor(bounds.get_x()),
+      y: Math.floor(bounds.get_y()),
+      width: Math.ceil(bounds.get_width()),
+      height: Math.ceil(bounds.get_height()),
+    });
+  }
+  surface.set_input_region(region);
+}
+
+function createCaptureWindow(monitor: Gdk.Monitor, index: number): Gtk.Window {
+  const { TOP, BOTTOM, LEFT, RIGHT } = Astal.WindowAnchor;
+  const appsService = new AstalApps.Apps();
+
+  const searchEntry = new Gtk.Entry({
+    placeholder_text: "Type to search",
+    primary_icon_name: "system-search-symbolic",
+    halign: Gtk.Align.CENTER,
     valign: Gtk.Align.START,
-    opacity: 0.01,
+    width_request: 400,
   });
+  searchEntry.add_css_class("launcher-search");
+
+  let alive = true;
+
+  const dockBox = createMiniDock({
+    appsService,
+    isAlive: () => alive,
+    onFocusWindow: () => destroyCaptureWindows(),
+    onShowApps: () => {
+      destroyCaptureWindows();
+      openedFromOverview = true;
+      openLauncher(monitor);
+    },
+    onPopulated: () => {
+      GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+        if (alive) updateInputRegion(win, [searchEntry, dockBox]);
+        return GLib.SOURCE_REMOVE;
+      });
+    },
+  });
+
+  const container = new Gtk.Box({
+    orientation: Gtk.Orientation.VERTICAL,
+    halign: Gtk.Align.CENTER,
+    valign: Gtk.Align.FILL,
+    margin_top: 24,
+    margin_bottom: 24,
+  });
+
+  const spacer = new Gtk.Box({ vexpand: true });
+  container.append(searchEntry);
+  container.append(spacer);
+  container.append(dockBox);
 
   const win = (
     <window
@@ -56,10 +111,10 @@ function createCaptureWindow(monitor: Gdk.Monitor, index: number): Gtk.Window {
       layer={Astal.Layer.OVERLAY}
       exclusivity={Astal.Exclusivity.IGNORE}
       keymode={Astal.Keymode.EXCLUSIVE}
-      anchor={TOP | LEFT}
+      anchor={TOP | BOTTOM | LEFT | RIGHT}
       application={app}
     >
-      {entry}
+      {container}
     </window>
   ) as Gtk.Window;
 
@@ -100,23 +155,23 @@ function createCaptureWindow(monitor: Gdk.Monitor, index: number): Gtk.Window {
       return true;
     }
 
-    return true;
+    return false;
+  });
+
+  win.connect("destroy", () => {
+    alive = false;
   });
 
   win.connect("realize", () => {
-    const surface = win.get_surface();
-    if (surface) {
-      surface.set_input_region(new Cairo.Region());
-    }
+    updateInputRegion(win, [searchEntry, dockBox]);
   });
 
   win.add_controller(keyCtrl);
   GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-    const surface = win.get_surface();
-    if (surface) {
-      surface.set_input_region(new Cairo.Region());
+    if (alive) {
+      updateInputRegion(win, [searchEntry, dockBox]);
+      searchEntry.grab_focus();
     }
-    entry.grab_focus();
     return GLib.SOURCE_REMOVE;
   });
   return win;
