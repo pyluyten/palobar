@@ -22,6 +22,7 @@
       astal4
       io
       apps
+      auth
       battery
       network
       notifd
