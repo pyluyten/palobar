@@ -45,7 +45,7 @@ function createCaptureWindow(monitor: Gdk.Monitor, index: number): Gtk.Window {
     height_request: 1,
     halign: Gtk.Align.START,
     valign: Gtk.Align.START,
-    opacity: 0,
+    opacity: 0.01,
   });
 
   const win = (

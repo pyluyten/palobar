@@ -11,12 +11,15 @@ $danger: #e01b24;
 
 window.panel-window,
 window.popup-window,
-window.toast-window,
-window.overview-capture-window {
+window.toast-window {
   background: transparent;
   color: $panel-fg;
   font-family: "Cantarell", "Inter", sans-serif;
   font-size: 13.5px;
+}
+
+window.overview-capture-window {
+  background-color: rgba(0, 0, 0, 0.01);
 }
 
 window.panel-window {
