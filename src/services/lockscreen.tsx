@@ -1,4 +1,4 @@
-// LockScreen.tsx — lock screen "à la GNOME" pour AGS v3 (gnim) + GTK4
+// lockscreen.tsx — lock screen "à la GNOME" pour AGS v3 (gnim) + GTK4
 //
 // Dépendances système :
 //   - gtk4-session-lock  (typelib Gtk4SessionLock) -> protocole ext-session-lock-v1
@@ -225,7 +225,7 @@ function syncWindows() {
 
 let css_applied = false
 
-export function lock_screen() {
+export function lockScreen() {
     if (lock) return // déjà verrouillé
 
     if (!SessionLock.is_supported()) {
