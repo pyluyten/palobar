@@ -5,12 +5,16 @@ import GLib from "gi://GLib";
 import { popups } from "../services/popups";
 
 let runWindow: Gtk.Window | null = null;
+let onCloseCallback: (() => void) | null = null;
 
 export function closeRunCommand() {
   if (runWindow) {
     runWindow.close();
     runWindow.destroy();
     runWindow = null;
+    const cb = onCloseCallback;
+    onCloseCallback = null;
+    cb?.();
   }
 }
 
@@ -55,11 +59,16 @@ function executeCommand(cmd: string) {
   }
 }
 
-export function toggleRunCommand(monitor?: Gdk.Monitor) {
+export function toggleRunCommand(
+  monitor?: Gdk.Monitor,
+  onClose?: () => void,
+) {
   if (runWindow) {
     closeRunCommand();
     return;
   }
+
+  onCloseCallback = onClose ?? null;
 
   popups.close();
 

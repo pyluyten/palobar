@@ -65,6 +65,7 @@
         mkdir -p $out/bin
 
         ags bundle src/prefs.ts $out/bin/palobar-prefs
+        ags bundle src/run-command.ts $out/bin/palobar-run-command
         ags bundle src/app.ts $out/bin/.palobar-bin
 
         wrapProgram $out/bin/palobar-prefs \
@@ -76,6 +77,12 @@
 
         cat > $out/bin/palobar-ctl <<EOF
         #!${pkgs.runtimeShell}
+        if ${agsWithDeps}/bin/ags request "\$@" 2>/dev/null; then
+          exit 0
+        fi
+        if [ "\''${1:-}" = "run-command" ]; then
+          exec $out/bin/palobar-run-command
+        fi
         exec ${agsWithDeps}/bin/ags request "\$@"
         EOF
         chmod +x $out/bin/palobar-ctl
