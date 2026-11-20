@@ -220,7 +220,7 @@ export function ClipboardPopup(gdkmonitor: Gdk.Monitor) {
         </box>
 
         <Gtk.ScrolledWindow
-          maxContentHeight={420}
+          maxContentHeight={560}
           propagateNaturalHeight
           visible={entries((list) => list.length > 0)}
         >
