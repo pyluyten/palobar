@@ -24,7 +24,8 @@ The project is too young to describe installation which is likely a mess.
 * `palobar` imitates gnome-panel + launcher
 * `palobar-ctl toggle-launcher` to activate launcher independantly from overwiew
 * `palobar-prefs` imitates gnome-control-center
-* `palobar-run-command` will use niri spawn-sh to run anything. Include palobar.
+* `palobar-run-command` will use niri spawn-sh to run anything.
+    This includes running `palobar` since you do not need it to run.
 * `palobar-ctl quit` is mostly useful for me
 
 See [TODO](TODO.md) for things i may add.
