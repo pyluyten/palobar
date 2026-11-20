@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<language id="kdl" name="KDL" version="2.0" _section="Other">
+  <metadata>
+    <property name="mimetypes">text/x-kdl;application/x-kdl</property>
+    <property name="globs">*.kdl</property>
+    <property name="line-comment-start">//</property>
+    <property name="block-comment-start">/*</property>
+    <property name="block-comment-end">*/</property>
+  </metadata>
+
+  <styles>
+    <style id="comment" name="Comment" map-to="def:comment"/>
+    <style id="string" name="String" map-to="def:string"/>
+    <style id="escaped-character" name="Escaped Character" map-to="def:special-char"/>
+    <style id="keyword" name="Keyword" map-to="def:keyword"/>
+    <style id="boolean" name="Boolean" map-to="def:boolean"/>
+    <style id="number" name="Number" map-to="def:number"/>
+    <style id="type" name="Type Annotation" map-to="def:type"/>
+    <style id="property" name="Property Key" map-to="def:identifier"/>
+    <style id="node" name="Node Name" map-to="def:function"/>
+  </styles>
+
+  <definitions>
+    <!-- Commentaires standards -->
+    <context id="line-comment" style-ref="comment" end-at-line-end="true">
+      <start>//</start>
+    </context>
+
+    <context id="block-comment" style-ref="comment">
+      <start>/\*</start>
+      <end>\*/</end>
+      <include>
+        <context ref="block-comment"/>
+      </include>
+    </context>
+
+    <!-- Commentaires Slashdash (/-) -->
+    <context id="slashdash" style-ref="comment">
+      <match>/-</match>
+    </context>
+
+    <!-- Chaînes de caractères -->
+    <context id="escaped-character" style-ref="escaped-character">
+      <match>\\.</match>
+    </context>
+
+    <context id="double-quoted-string" style-ref="string">
+      <start>"</start>
+      <end>"</end>
+      <include>
+        <context ref="escaped-character"/>
+      </include>
+    </context>
+
+    <context id="raw-string" style-ref="string">
+      <start>r(#*)"</start>
+      <end>"\%{1@start}</end>
+    </context>
+
+    <!-- Valeurs spéciales KDL 2.0 et 1.0 -->
+    <context id="booleans" style-ref="boolean">
+      <match>(?&lt;!\S)(#?true|#?false)(?!\S)</match>
+    </context>
+
+    <context id="null" style-ref="keyword">
+      <match>(?&lt;!\S)(#?null)(?!\S)</match>
+    </context>
+
+    <!-- Nombres -->
+    <context id="numbers" style-ref="number">
+      <match>(?&lt;!\S)[+-]?(0x[0-9a-fA-F_]+|0o[0-7_]+|0b[01_]+|[0-9][0-9_]*(\.[0-9_]+)?([eE][+-]?[0-9_]+)?|#inf|#-inf|#nan)(?!\S)</match>
+    </context>
+
+    <!-- Annotations de type : (u8) ou ("custom") -->
+    <context id="type-annotation" style-ref="type">
+      <match>\([^)\s]+\)</match>
+    </context>
+
+    <!-- Propriétés : cle= -->
+    <context id="property-key" style-ref="property">
+      <match>[^\s={}()\[\]"\\/#]+(?==)</match>
+    </context>
+
+    <!-- Contexte principal -->
+    <context id="kdl">
+      <include>
+        <context ref="line-comment"/>
+        <context ref="block-comment"/>
+        <context ref="slashdash"/>
+        <context ref="raw-string"/>
+        <context ref="double-quoted-string"/>
+        <context ref="type-annotation"/>
+        <context ref="booleans"/>
+        <context ref="null"/>
+        <context ref="numbers"/>
+        <context ref="property-key"/>
+      </include>
+    </context>
+  </definitions>
+</language>

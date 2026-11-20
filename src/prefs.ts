@@ -10,6 +10,7 @@ import {
 } from "./services/config";
 import { PREFS_CSS, type PrefsContext } from "./prefs/ui";
 import { buildOutputPage } from "./prefs/output";
+import { buildNiriPage } from "./prefs/niri";
 import { buildSoundPage } from "./prefs/sound";
 import { buildPowerPage } from "./prefs/power";
 import { buildAppearancePage } from "./prefs/appearance";
@@ -74,6 +75,7 @@ function buildPrefsWindow() {
   stack.add_named(buildOutputPage(win), "output");
   stack.add_named(buildSoundPage(), "sound");
   stack.add_named(buildPowerPage(ctx), "power");
+  stack.add_named(buildNiriPage(win), "niri");
   stack.add_named(buildAppearancePage(win, ctx, syncAppearance), "appearance");
   stack.add_named(buildPrintersPage(), "printers");
   stack.add_named(buildSecurityPage(win, ctx), "security");
@@ -130,6 +132,11 @@ function buildPrefsWindow() {
       id: "power",
       label: "Power",
       icon: "battery-good-symbolic",
+    },
+    {
+      id: "niri",
+      label: "Niri",
+      icon: "text-x-generic-symbolic",
     },
     {
       id: "appearance",

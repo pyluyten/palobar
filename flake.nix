@@ -67,12 +67,14 @@
         runHook preInstall
         export HOME=$(mktemp -d)
         mkdir -p $out/bin
+        install -Dm644 kdl.lang $out/share/palobar/language-specs/kdl.lang
 
         ags bundle src/prefs.ts $out/bin/palobar-prefs
         ags bundle src/run-command.ts $out/bin/palobar-run-command
         ags bundle src/app.ts $out/bin/.palobar-bin
 
         wrapProgram $out/bin/palobar-prefs \
+          --set PALOBAR_GTKSOURCE_LANGUAGE_DIR $out/share/palobar/language-specs \
           --prefix PATH : $out/bin \
           --prefix PATH : ${pkgs.lib.makeBinPath [pkgs.bash pkgs.swaylock]}
 
@@ -119,6 +121,7 @@
     packages.${system}.default = palobar;
 
     devShells.${system}.default = pkgs.mkShell {
+      PALOBAR_GTKSOURCE_LANGUAGE_DIR = "${self}";
       packages = [
         agsWithDeps
         pkgs.nodejs
