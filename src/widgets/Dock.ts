@@ -140,13 +140,17 @@ export function createMiniDock(opts: MiniDockOptions): Gtk.Box {
         });
         actions.append(newWindow);
 
-        if (favoriteId) {
-          const remove = new Gtk.Button({ label: "Remove from Favorites" });
-          remove.connect("clicked", () => {
-            closeContextMenu();
-            removeFavoriteApp(favoriteId);
+        const desktopId = desktop?.get_id();
+        if (favoriteId || desktopId?.endsWith(".desktop")) {
+          const favorite = new Gtk.Button({
+            label: favoriteId ? "Remove from Favorites" : "Add to Favorites",
           });
-          actions.append(remove);
+          favorite.connect("clicked", () => {
+            closeContextMenu();
+            if (favoriteId) removeFavoriteApp(favoriteId);
+            else if (desktopId) addFavoriteApp(desktopId);
+          });
+          actions.append(favorite);
         }
 
         menu.connect("closed", () => {
@@ -181,9 +185,11 @@ export function createMiniDock(opts: MiniDockOptions): Gtk.Box {
     const appsByEntry = new Map(opts.appsService.list.map((app) => [app.entry, app]));
     for (const id of favoriteIds) {
       const favorite = appsByEntry.get(id);
-      if (!favorite) continue;
+      const desktop = Gio.DesktopAppInfo.new(id) ?? undefined;
+      if (!favorite && !desktop) continue;
 
-      const keys = [appKey(id), appKey(favorite.wmClass || "")];
+      const name = favorite?.name || desktop?.get_display_name() || id;
+      const keys = [appKey(id), appKey(favorite?.wmClass || ""), appKey(name)];
       const matches = keys.flatMap((key) => {
         const window = runningApps.get(key);
         runningApps.delete(key);
@@ -191,11 +197,15 @@ export function createMiniDock(opts: MiniDockOptions): Gtk.Box {
       });
       const running = matches.find((window) => window.is_focused) ?? matches[0];
       appendApp(
-        favorite.name,
-        favorite.iconName || "application-x-executable",
+        name,
+        favorite?.iconName || desktop?.get_icon()?.to_string() || "application-x-executable",
         Boolean(running),
-        () => running ? niri.focusWindow(running.id) : favorite.launch(),
-        Gio.DesktopAppInfo.new(id) ?? undefined,
+        () => {
+          if (running) niri.focusWindow(running.id);
+          else if (favorite) favorite.launch();
+          else desktop?.launch([], null);
+        },
+        desktop,
         id,
       );
     }
