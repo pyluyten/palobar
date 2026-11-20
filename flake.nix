@@ -52,6 +52,7 @@
           pkgs.gjs
           pkgs.gtk4
           pkgs.gtk4-layer-shell
+          pkgs.gtksourceview5
           pkgs.dart-sass
           pkgs.swaybg
           pkgs.swaylock
@@ -122,6 +123,7 @@
         agsWithDeps
         pkgs.nodejs
         pkgs.typescript
+        pkgs.gtksourceview5
         pkgs.dart-sass
         pkgs.swaybg
         pkgs.swaylock

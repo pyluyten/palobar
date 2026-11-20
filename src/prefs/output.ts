@@ -1,6 +1,7 @@
 import { Gtk } from "ags/gtk4";
 import Gio from "gi://Gio";
 import GLib from "gi://GLib";
+import GtkSource from "gi://GtkSource?version=5";
 import { execAsync } from "ags/process";
 import { makeGroupBox, makeRow } from "./ui";
 
@@ -32,7 +33,10 @@ async function getOutputs(): Promise<Record<string, Output>> {
   return JSON.parse(await execAsync(["niri", "msg", "-j", "outputs"]));
 }
 
-function loadConfigPreview(view: Gtk.TextView) {
+function loadConfigPreview(
+  buffer: GtkSource.Buffer,
+  onLoaded: (file: Gio.File) => void,
+) {
   try {
     const proc = Gio.Subprocess.new(
       ["niri", "validate"],
@@ -44,18 +48,20 @@ function loadConfigPreview(view: Gtk.TextView) {
         const path = log?.match(/loaded config from "([^"\n]+)"/)?.[1]
           ?? GLib.getenv("NIRI_CONFIG")
           ?? GLib.build_filenamev([GLib.get_user_config_dir(), "niri", "config.kdl"]);
-        const [, bytes] = Gio.File.new_for_path(path).load_contents(null);
-        const excerpt = new TextDecoder().decode(bytes).slice(0, 3600);
+        const file = Gio.File.new_for_path(path);
+        const [, bytes] = file.load_contents(null);
+        const language = GtkSource.LanguageManager.get_default().guess_language(path, null);
+        buffer.set_language(language);
         const status = proc.get_successful() ? "" : "Niri configuration validation failed.\n\n";
-        view.tooltip_text = path;
-        view.get_buffer().set_text(status + excerpt, -1);
+        buffer.set_text(status + new TextDecoder().decode(bytes), -1);
+        onLoaded(file);
       } catch (err) {
-        view.get_buffer().set_text("Could not read the niri configuration.", -1);
+        buffer.set_text("Could not read the niri configuration.", -1);
         console.error("[output] could not read niri config:", err);
       }
     });
   } catch (err) {
-    view.get_buffer().set_text("Could not run niri validate.", -1);
+    buffer.set_text("Could not run niri validate.", -1);
     console.error("[output] could not validate niri config:", err);
   }
 }
@@ -113,7 +119,37 @@ export function buildOutputPage(win: Gtk.Window): Gtk.Widget {
 
   const previewLabel = new Gtk.Label({ label: "Niri Configuration", halign: Gtk.Align.START });
   previewLabel.add_css_class("prefs-group-title");
-  const preview = new Gtk.TextView({
+  previewLabel.hexpand = true;
+  const previewHeader = new Gtk.Box({ spacing: 8 });
+  previewHeader.append(previewLabel);
+
+  let configFile: Gio.File | null = null;
+  const edit = new Gtk.Button({ label: "Edit", sensitive: false });
+  edit.add_css_class("prefs-btn");
+  edit.connect("clicked", () => {
+    if (!configFile) return;
+    try {
+      const editor = Gio.AppInfo.get_default_for_type("text/plain", false);
+      if (!editor) throw new Error("No default text editor is configured.");
+      const context = win.get_display().get_app_launch_context();
+      if (!editor.launch([configFile], context)) {
+        throw new Error("The default text editor could not be launched.");
+      }
+    } catch (err) {
+      console.error("[output] could not open niri config:", err);
+      new Gtk.AlertDialog({
+        message: "Could not open the niri configuration",
+        detail: err instanceof Error ? err.message : String(err),
+      }).show(win);
+    }
+  });
+  previewHeader.append(edit);
+
+  GtkSource.init();
+  const buffer = new GtkSource.Buffer();
+  const preview = new GtkSource.View({
+    buffer,
+    show_line_numbers: true,
     editable: false,
     cursor_visible: false,
     monospace: true,
@@ -122,9 +158,9 @@ export function buildOutputPage(win: Gtk.Window): Gtk.Widget {
     right_margin: 8,
     top_margin: 8,
   });
-  preview.get_buffer().set_text("Loading configuration…", -1);
-  page.append(previewLabel);
-  page.append(new Gtk.ScrolledWindow({ child: preview, height_request: 116 }));
+  buffer.set_text("Loading configuration…", -1);
+  page.append(previewHeader);
+  page.append(new Gtk.ScrolledWindow({ child: preview, height_request: 176 }));
 
   const displays = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 12 });
   page.append(displays);
@@ -331,7 +367,13 @@ export function buildOutputPage(win: Gtk.Window): Gtk.Widget {
   }
 
   page.connect("map", () => {
-    loadConfigPreview(preview);
+    configFile = null;
+    edit.sensitive = false;
+    loadConfigPreview(buffer, (file) => {
+      configFile = file;
+      edit.sensitive = true;
+      preview.tooltip_text = file.get_path();
+    });
     void refresh();
   });
 
