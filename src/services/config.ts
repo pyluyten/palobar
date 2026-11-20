@@ -147,6 +147,14 @@ export function addFavoriteApp(id: string): boolean {
   );
 }
 
+export function removeFavoriteApp(id: string): boolean {
+  return updateConfig((current) =>
+    current.favoriteApps.includes(id)
+      ? { ...current, favoriteApps: current.favoriteApps.filter((entry) => entry !== id) }
+      : current,
+  );
+}
+
 type ConfigListener = (cfg: PalobarConfig) => void;
 
 class ConfigService {

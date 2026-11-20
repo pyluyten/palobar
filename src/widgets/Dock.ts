@@ -1,13 +1,13 @@
 import { Gdk, Gtk } from "ags/gtk4";
 import AstalApps from "gi://AstalApps";
 import Gio from "gi://Gio";
-import { addFavoriteApp, configService } from "../services/config";
+import { addFavoriteApp, configService, removeFavoriteApp } from "../services/config";
 import { niri, type NiriWindow } from "../services/niri";
 
 export function resolveAppInfo(
   appId: string,
   appsService: AstalApps.Apps,
-): { name: string; iconName: string } {
+): { name: string; iconName: string; desktop?: Gio.DesktopAppInfo } {
   const desktopCandidates = [
     appId,
     `${appId}.desktop`,
@@ -20,7 +20,7 @@ export function resolveAppInfo(
       const info = Gio.DesktopAppInfo.new(candidate);
       if (info) {
         const icon = info.get_icon()?.to_string() || appId;
-        return { name: info.get_display_name() || appId, iconName: icon };
+        return { name: info.get_display_name() || appId, iconName: icon, desktop: info };
       }
     } catch {
       // ignore
@@ -38,6 +38,7 @@ export function resolveAppInfo(
     return {
       name: match.name,
       iconName: match.iconName || "application-x-executable",
+      desktop: Gio.DesktopAppInfo.new(match.entry) ?? undefined,
     };
   }
 
@@ -71,12 +72,23 @@ export function createMiniDock(opts: MiniDockOptions): Gtk.Box {
 
   let windows: NiriWindow[] = [];
   let unsubscribe: (() => void) | undefined;
+  let contextMenu: Gtk.Popover | null = null;
+
+  const closeContextMenu = () => {
+    const menu = contextMenu;
+    if (!menu) return;
+    contextMenu = null;
+    menu.popdown();
+    menu.unparent();
+  };
 
   const appendApp = (
     name: string,
     iconName: string,
     running: boolean,
     activate: () => void,
+    desktop?: Gio.DesktopAppInfo,
+    favoriteId?: string,
   ) => {
     const button = new Gtk.Button({ tooltip_text: name });
     button.add_css_class("launcher-dock-item");
@@ -102,12 +114,59 @@ export function createMiniDock(opts: MiniDockOptions): Gtk.Box {
       opts.onActivateApp();
       activate();
     });
+    if (desktop || favoriteId) {
+      const rightClick = new Gtk.GestureClick({ button: Gdk.BUTTON_SECONDARY });
+      rightClick.connect("pressed", (gesture) => {
+        gesture.set_state(Gtk.EventSequenceState.CLAIMED);
+        closeContextMenu();
+
+        const actions = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 4 });
+        const menu = new Gtk.Popover({ child: actions, position: Gtk.PositionType.TOP });
+        const newWindow = new Gtk.Button({ label: "New Window", sensitive: Boolean(desktop) });
+        newWindow.connect("clicked", () => {
+          if (!desktop) return;
+          const context = button.get_display().get_app_launch_context();
+          closeContextMenu();
+          try {
+            const action = desktop.list_actions().find(
+              (id) => id.toLowerCase().replace(/[-_]/g, "") === "newwindow",
+            );
+            if (action) desktop.launch_action(action, context);
+            else if (!desktop.launch([], context)) return;
+            opts.onActivateApp();
+          } catch (err) {
+            console.error("[dock] failed to open a new window:", err);
+          }
+        });
+        actions.append(newWindow);
+
+        if (favoriteId) {
+          const remove = new Gtk.Button({ label: "Remove from Favorites" });
+          remove.connect("clicked", () => {
+            closeContextMenu();
+            removeFavoriteApp(favoriteId);
+          });
+          actions.append(remove);
+        }
+
+        menu.connect("closed", () => {
+          if (contextMenu !== menu) return;
+          contextMenu = null;
+          menu.unparent();
+        });
+        contextMenu = menu;
+        menu.set_parent(button);
+        menu.popup();
+      });
+      button.add_controller(rightClick);
+    }
     dockBox.append(button);
   };
 
   const appKey = (id: string) => id.trim().toLowerCase().replace(/\.desktop$/, "");
 
   const rebuild = (favoriteIds: string[]) => {
+    closeContextMenu();
     for (let child = dockBox.get_first_child(); child; child = dockBox.get_first_child()) {
       dockBox.remove(child);
     }
@@ -136,13 +195,15 @@ export function createMiniDock(opts: MiniDockOptions): Gtk.Box {
         favorite.iconName || "application-x-executable",
         Boolean(running),
         () => running ? niri.focusWindow(running.id) : favorite.launch(),
+        Gio.DesktopAppInfo.new(id) ?? undefined,
+        id,
       );
     }
 
     for (const window of runningApps.values()) {
       const appId = window.app_id || window.title || "application";
-      const { name, iconName } = resolveAppInfo(appId, opts.appsService);
-      appendApp(name, iconName, true, () => niri.focusWindow(window.id));
+      const { name, iconName, desktop } = resolveAppInfo(appId, opts.appsService);
+      appendApp(name, iconName, true, () => niri.focusWindow(window.id), desktop);
     }
 
     if (opts.onShowApps) {
@@ -180,6 +241,7 @@ export function createMiniDock(opts: MiniDockOptions): Gtk.Box {
     unsubscribe = configService.subscribe((cfg) => rebuild(cfg.favoriteApps));
   });
   dockBox.connect("unmap", () => {
+    closeContextMenu();
     unsubscribe?.();
     unsubscribe = undefined;
   });
