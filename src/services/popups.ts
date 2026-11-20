@@ -1,6 +1,11 @@
 import { createState } from "ags";
 
-export type PopupName = "calendar" | "quick-settings" | "notifications" | null;
+export type PopupName =
+  | "calendar"
+  | "quick-settings"
+  | "notifications"
+  | "clipboard"
+  | null;
 
 const [activePopup, setActivePopup] = createState<PopupName>(null);
 

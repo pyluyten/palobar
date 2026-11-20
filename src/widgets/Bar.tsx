@@ -163,10 +163,18 @@ export function Bar(gdkmonitor: Gdk.Monitor, index: number) {
           </button>
         </box>
 
-        {/* Right: SysTray + Notification tray + Network + Volume + Session */}
+        {/* Right: SysTray + Notification tray + Clipboard + Network + Volume + Session */}
         <box $type="end" class="panel-right" spacing={4}>
           <SysTray />
           <NotificationIndicator />
+
+          <button
+            class={`panel-button clipboard-button ${popups.active((p) => (p === "clipboard" ? "open" : ""))}`}
+            tooltipText="Clipboard History"
+            onClicked={() => popups.toggle("clipboard")}
+          >
+            <image iconName="edit-paste-symbolic" />
+          </button>
 
           <button
             class={`panel-button system-menu-button ${popups.active((p) => (p === "quick-settings" ? "open" : ""))}`}

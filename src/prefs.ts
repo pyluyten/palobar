@@ -12,6 +12,7 @@ import { buildSoundPage } from "./prefs/sound";
 import { buildPowerPage } from "./prefs/power";
 import { buildAppearancePage } from "./prefs/appearance";
 import { buildSecurityPage } from "./prefs/security";
+import { buildPrintersPage } from "./prefs/printers";
 
 function buildPrefsWindow() {
   let cfg: PalobarConfig = loadConfig();
@@ -71,6 +72,7 @@ function buildPrefsWindow() {
   stack.add_named(buildSoundPage(), "sound");
   stack.add_named(buildPowerPage(ctx), "power");
   stack.add_named(buildAppearancePage(win, ctx, syncAppearance), "appearance");
+  stack.add_named(buildPrintersPage(), "printers");
   stack.add_named(buildSecurityPage(win, ctx), "security");
 
   // --- Left Sidebar ---
@@ -108,6 +110,11 @@ function buildPrefsWindow() {
       id: "appearance",
       label: "Appearance",
       icon: "preferences-desktop-wallpaper-symbolic",
+    },
+    {
+      id: "printers",
+      label: "Printers",
+      icon: "printer-symbolic",
     },
     {
       id: "security",

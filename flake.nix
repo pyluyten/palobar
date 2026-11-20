@@ -55,6 +55,8 @@
           pkgs.swaybg
           pkgs.swaylock
           pkgs.swayidle
+          pkgs.wl-clipboard
+          pkgs.cliphist
           pkgs.networkmanager
         ]
         ++ astalDeps;
@@ -73,7 +75,7 @@
 
         wrapProgram $out/bin/.palobar-bin \
           --prefix PATH : $out/bin \
-          --prefix PATH : ${pkgs.lib.makeBinPath [pkgs.swaybg pkgs.swaylock pkgs.swayidle pkgs.networkmanager]}
+          --prefix PATH : ${pkgs.lib.makeBinPath [pkgs.swaybg pkgs.swaylock pkgs.swayidle pkgs.wl-clipboard pkgs.cliphist pkgs.networkmanager]}
 
         cat > $out/bin/palobar-ctl <<EOF
         #!${pkgs.runtimeShell}
@@ -112,6 +114,8 @@
         pkgs.swaybg
         pkgs.swaylock
         pkgs.swayidle
+        pkgs.wl-clipboard
+        pkgs.cliphist
       ];
     };
   };

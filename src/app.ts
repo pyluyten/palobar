@@ -5,11 +5,16 @@ import { CalendarPopup } from "./widgets/CalendarPopup";
 import { QuickSettings } from "./widgets/QuickSettings";
 import { NotificationsPopup } from "./widgets/NotificationsPopup";
 import { NotificationToasts } from "./widgets/NotificationToasts";
+import { ClipboardPopup } from "./widgets/ClipboardPopup";
 import { toggleLauncher } from "./widgets/Launcher";
 import { toggleRunCommand } from "./widgets/RunCommand";
 import { initOverviewCapture } from "./widgets/OverviewCapture";
 import { initWallpaperService, stopWallpaper } from "./services/wallpaper";
 import { initPowerService, stopPowerService } from "./services/power";
+import {
+  initClipboardService,
+  stopClipboardService,
+} from "./services/clipboard";
 import { configService } from "./services/config";
 import { lockScreen } from "./services/lockscreen";
 
@@ -35,6 +40,7 @@ app.start({
     if (cmd === "quit") {
       stopWallpaper();
       stopPowerService();
+      stopClipboardService();
       res("ok");
       app.quit();
       return;
@@ -62,6 +68,7 @@ app.start({
 
     initWallpaperService();
     initPowerService();
+    initClipboardService();
     initOverviewCapture();
 
     const monitors = app.get_monitors();
@@ -73,6 +80,7 @@ app.start({
       QuickSettings(primary);
       NotificationsPopup(primary);
       NotificationToasts(primary);
+      ClipboardPopup(primary);
     }
   },
 });

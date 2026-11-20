@@ -53,4 +53,5 @@ ____
 ## Meta
 
 - Be easy to install
-- Plugins, like which-key
+- Plugins, like which-key?
+- Change tech if too heavy or uneasy

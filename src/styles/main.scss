@@ -100,6 +100,7 @@ window.panel-window {
 
 .system-menu-button image,
 .notifications-button image,
+.clipboard-button image,
 .tray-item image {
   -gtk-icon-size: 15px;
 }
@@ -500,4 +501,50 @@ window.launcher-window {
 .run-completion-label {
   font-family: monospace;
   font-size: 13px;
+}
+
+/* Clipboard History */
+.clipboard-drawer {
+  min-width: 340px;
+}
+
+.clipboard-search {
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 5px 10px;
+  color: $panel-fg;
+  font-size: 13px;
+}
+
+.clipboard-item {
+  background-color: $card-bg;
+  border-radius: 12px;
+  padding: 4px 8px;
+
+  &:hover {
+    background-color: $card-hover;
+  }
+}
+
+.clipboard-select-btn {
+  background: transparent;
+  background-image: none;
+  box-shadow: none;
+  border: none;
+  padding: 6px 4px;
+  color: $panel-fg;
+}
+
+.clipboard-text {
+  font-size: 13px;
+}
+
+.clipboard-meta {
+  font-size: 11.5px;
+  color: $muted-fg;
+}
+
+.clipboard-thumb {
+  border-radius: 8px;
 }

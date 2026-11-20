@@ -22,19 +22,17 @@ The project is too young to describe installation which is likely a mess.
 # Features
 
 * `palobar` imitates gnome-panel + launcher
-* `palobar-prefs` imitates gnome-control-center
 * `palobar-ctl toggle-launcher` to activate launcher independantly from overwiew
+* `palobar-prefs` imitates gnome-control-center
 * `palobar-run-command` will use niri spawn-sh to run anything. Include palobar.
-* `palobar-ctl quit`
-
+* `palobar-ctl quit` is mostly useful for me
 
 See [TODO](TODO.md) for things i may add.
 
 ## Niri overview
 
-Like GNOME : 
+Like GNOME, when niri triggers overview
+
 * a search entry appears
 * a dock appears, allows to click on app
 * if user types, apps appear.
-
-
