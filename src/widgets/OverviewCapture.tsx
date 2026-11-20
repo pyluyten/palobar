@@ -93,7 +93,7 @@ function createCaptureWindow(monitor: Gdk.Monitor, index: number): Gtk.Window {
     orientation: Gtk.Orientation.VERTICAL,
     halign: Gtk.Align.CENTER,
     valign: Gtk.Align.FILL,
-    margin_top: 24,
+    margin_top: 42,
     margin_bottom: 24,
   });
 

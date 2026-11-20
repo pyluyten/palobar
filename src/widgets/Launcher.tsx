@@ -313,7 +313,7 @@ export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
     spacing: 20,
     halign: Gtk.Align.CENTER,
     valign: Gtk.Align.FILL,
-    margin_top: 24,
+    margin_top: 42,
     margin_bottom: 24,
     margin_start: 32,
     margin_end: 32,
