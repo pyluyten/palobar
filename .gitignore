@@ -3,3 +3,4 @@ node_modules/
 dist/
 result
 *.log
+nprnpa.sh
