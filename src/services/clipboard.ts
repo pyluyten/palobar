@@ -9,22 +9,49 @@ export interface ClipboardEntry {
 }
 
 let watchProc: Gio.Subprocess | null = null;
+let watchError: string | null = null;
+
+export function getClipboardWatchError(): string | null {
+  return watchError;
+}
 
 export function initClipboardService() {
   if (watchProc) return;
+  watchError = null;
   const wlPaste = GLib.find_program_in_path("wl-paste");
   const cliphist = GLib.find_program_in_path("cliphist");
   if (!wlPaste || !cliphist) {
-    console.error("[clipboard] wl-paste or cliphist not found in PATH");
+    const missing = [!wlPaste && "wl-paste", !cliphist && "cliphist"]
+      .filter(Boolean)
+      .join(", ");
+    watchError = `Clipboard history requires ${missing} in Palobar's PATH.`;
+    console.error("[clipboard]", watchError);
     return;
   }
 
   try {
-    watchProc = Gio.Subprocess.new(
+    const proc = Gio.Subprocess.new(
       [wlPaste, "--watch", cliphist, "store"],
-      Gio.SubprocessFlags.NONE,
+      Gio.SubprocessFlags.STDERR_PIPE,
     );
+    watchProc = proc;
+    proc.communicate_utf8_async(null, null, (_proc, result) => {
+      if (watchProc !== proc) return;
+      watchProc = null;
+      try {
+        const [, , stderr] = proc.communicate_utf8_finish(result);
+        const detail = stderr?.trim();
+        watchError = detail?.includes("data-control")
+          ? "Clipboard history requires Wayland data-control. Start Palobar directly in your niri session."
+          : "Clipboard history capture stopped. Check Palobar's logs.";
+        console.error("[clipboard] wl-paste watcher stopped:", detail);
+      } catch (err) {
+        watchError = "Clipboard history capture stopped. Check Palobar's logs.";
+        console.error("[clipboard] failed to monitor wl-paste:", err);
+      }
+    });
   } catch (err) {
+    watchError = "Could not start clipboard history capture. Check Palobar's logs.";
     console.error("[clipboard] failed to start wl-paste watcher:", err);
     watchProc = null;
   }

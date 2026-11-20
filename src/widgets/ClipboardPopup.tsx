@@ -5,6 +5,7 @@ import {
   copyClipboardEntry,
   decodeClipboardBytes,
   deleteClipboardEntry,
+  getClipboardWatchError,
   listClipboardEntries,
   wipeClipboard,
   type ClipboardEntry,
@@ -16,6 +17,8 @@ export function ClipboardPopup(gdkmonitor: Gdk.Monitor) {
 
   const [entries, setEntries] = createState<ClipboardEntry[]>([]);
   const [filterText, setFilterText] = createState("");
+
+  const [watchError, setWatchError] = createState<string | null>(null);
 
   let listContainer!: Gtk.Box;
   let searchEntry!: Gtk.Entry;
@@ -118,12 +121,13 @@ export function ClipboardPopup(gdkmonitor: Gdk.Monitor) {
 
   const refresh = async () => {
     const list = await listClipboardEntries(25);
+    setWatchError(getClipboardWatchError());
     setEntries(list);
     rebuildList();
   };
 
-  popups.active.subscribe((active) => {
-    if (active === "clipboard") {
+  popups.active.subscribe(() => {
+    if (popups.active.get() === "clipboard") {
       if (searchEntry) searchEntry.set_text("");
       setFilterText("");
       refresh();
@@ -208,7 +212,11 @@ export function ClipboardPopup(gdkmonitor: Gdk.Monitor) {
           visible={entries((list) => list.length === 0)}
         >
           <image iconName="edit-paste-symbolic" />
-          <label label="Clipboard is empty" />
+          <label
+            label={watchError((error) => error ?? "Clipboard is empty")}
+            maxWidthChars={38}
+            wrap
+          />
         </box>
 
         <Gtk.ScrolledWindow
