@@ -18,6 +18,7 @@ export interface PalobarConfig {
   lockscreen: {
     image: string;
     color: string;
+    autoLockDelaySeconds: number | null;
   };
   power: {
     screenBlankEnabled: boolean;
@@ -41,6 +42,7 @@ export const DEFAULT_CONFIG: PalobarConfig = {
   lockscreen: {
     image: "",
     color: "#131316",
+    autoLockDelaySeconds: null,
   },
   power: {
     screenBlankEnabled: true,

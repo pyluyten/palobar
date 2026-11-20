@@ -24,7 +24,11 @@ function applyPowerConfig(cfg: PalobarConfig) {
     autoSuspendMinutes,
   } = cfg.power;
 
-  const key = `${screenBlankEnabled}|${screenBlankMinutes}|${autoSuspendEnabled}|${autoSuspendMinutes}`;
+  const delay = cfg.lockscreen.autoLockDelaySeconds;
+  const lockDelay = typeof delay === "number" && Number.isFinite(delay) && delay >= 0
+    ? Math.round(delay)
+    : null;
+  const key = `${screenBlankEnabled}|${screenBlankMinutes}|${autoSuspendEnabled}|${autoSuspendMinutes}|${lockDelay}`;
   if (key === lastKey && (idleProc !== null || (!screenBlankEnabled && !autoSuspendEnabled))) {
     return;
   }
@@ -45,14 +49,18 @@ function applyPowerConfig(cfg: PalobarConfig) {
   const args = [swayidleBin, "-w"];
 
   if (screenBlankEnabled && screenBlankMinutes > 0) {
-    const secs = String(Math.round(screenBlankMinutes * 60));
+    const secs = Math.round(screenBlankMinutes * 60);
+    const blank = "niri msg action power-off-monitors";
     args.push(
       "timeout",
-      secs,
-      "niri msg action power-off-monitors",
+      String(secs),
+      lockDelay === 0 ? `${blank} && palobar-ctl lock` : blank,
       "resume",
       "niri msg action power-on-monitors",
     );
+    if (lockDelay !== null && lockDelay > 0) {
+      args.push("timeout", String(secs + lockDelay), "palobar-ctl lock");
+    }
   }
 
   if (autoSuspendEnabled && autoSuspendMinutes > 0) {

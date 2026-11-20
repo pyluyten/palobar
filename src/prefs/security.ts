@@ -1,8 +1,19 @@
-import { Gtk } from "ags/gtk4";
+import { Gdk, Gtk } from "ags/gtk4";
+import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 import { execAsync } from "ags/process";
-import { saveConfig } from "../services/config";
+import { DEFAULT_CONFIG, saveConfig } from "../services/config";
 import { makeGroupBox, makeRow, pickImage, type PrefsContext } from "./ui";
+
+const LOCK_DELAYS = [
+  { label: "Disabled", seconds: null },
+  { label: "Immediately", seconds: 0 },
+  { label: "30 seconds", seconds: 30 },
+  { label: "1 minute", seconds: 60 },
+  { label: "2 minutes", seconds: 120 },
+  { label: "5 minutes", seconds: 300 },
+  { label: "10 minutes", seconds: 600 },
+];
 
 export function buildSecurityPage(
   win: Gtk.Window,
@@ -24,6 +35,38 @@ export function buildSecurityPage(
   securityPage.append(lockGroupTitle);
 
   const lockGroup = makeGroupBox();
+
+  const previewRow = makeRow(false);
+  previewRow.halign = Gtk.Align.CENTER;
+  const previewFrame = new Gtk.Overlay({
+    child: new Gtk.Box({ width_request: 220, height_request: 124 }),
+    overflow: Gtk.Overflow.HIDDEN,
+  });
+  previewFrame.add_css_class("prefs-wp-preview");
+  const preview = new Gtk.Picture({ content_fit: Gtk.ContentFit.COVER });
+  previewFrame.add_overlay(preview);
+
+  const previewColor = new Gtk.CssProvider();
+  previewFrame.get_style_context().add_provider(
+    previewColor,
+    Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+  );
+  const currentColor = () => {
+    const color = new Gdk.RGBA();
+    if (!color.parse(ctx.getConfig().lockscreen.color)) color.parse(DEFAULT_CONFIG.lockscreen.color);
+    return color;
+  };
+  const refreshPreview = () => {
+    const current = ctx.getConfig();
+    const path = current.lockscreen.image || current.wallpaper.path;
+    preview.set_file(path && GLib.file_test(path, GLib.FileTest.IS_REGULAR)
+      ? Gio.File.new_for_path(path)
+      : null);
+    previewColor.load_from_string(`.prefs-wp-preview { background-color: ${currentColor().to_string()}; }`);
+  };
+  refreshPreview();
+  securityPage.connect("map", refreshPreview);
+  previewRow.append(previewFrame);
 
   // Row 1: Lock Screen Image
   const lockImageRow = makeRow(false);
@@ -57,6 +100,7 @@ export function buildSecurityPage(
         lockscreen: { ...current.lockscreen, image: path },
       });
       lockPathLabel.label = path;
+      refreshPreview();
     });
   });
 
@@ -69,6 +113,7 @@ export function buildSecurityPage(
       lockscreen: { ...current.lockscreen, image: "" },
     });
     lockPathLabel.label = "Defaults to wallpaper";
+    refreshPreview();
   });
 
   lockImageRow.append(lockImageInfo);
@@ -83,20 +128,65 @@ export function buildSecurityPage(
     halign: Gtk.Align.START,
   });
   lockColorLabel.add_css_class("prefs-row-title");
-  const lockColorEntry = new Gtk.Entry({
-    text: cfg.lockscreen.color,
-    width_chars: 10,
+  const colorBtn = new Gtk.ColorDialogButton({
+    dialog: new Gtk.ColorDialog({ with_alpha: false }),
+    rgba: currentColor(),
   });
-  lockColorEntry.add_css_class("prefs-entry");
-  lockColorEntry.connect("changed", () => {
+  colorBtn.connect("notify::rgba", () => {
+    const { red, green, blue } = colorBtn.get_rgba();
+    const hex = "#" + [red, green, blue]
+      .map((value) => Math.round(value * 255).toString(16).padStart(2, "0"))
+      .join("");
     const current = ctx.getConfig();
-    ctx.updateConfigDebounced({
+    ctx.updateConfig({
       ...current,
-      lockscreen: { ...current.lockscreen, color: lockColorEntry.text },
+      lockscreen: { ...current.lockscreen, color: hex },
     });
+    refreshPreview();
   });
   lockColorRow.append(lockColorLabel);
-  lockColorRow.append(lockColorEntry);
+  lockColorRow.append(colorBtn);
+
+  const autoLockRow = makeRow(false);
+  const autoLockInfo = new Gtk.Box({
+    orientation: Gtk.Orientation.VERTICAL,
+    spacing: 2,
+    hexpand: true,
+  });
+  const autoLockTitle = new Gtk.Label({
+    label: "Automatic Lock",
+    halign: Gtk.Align.START,
+  });
+  autoLockTitle.add_css_class("prefs-row-title");
+  const autoLockHint = new Gtk.Label({ halign: Gtk.Align.START });
+  autoLockHint.add_css_class("prefs-muted");
+  autoLockInfo.append(autoLockTitle);
+  autoLockInfo.append(autoLockHint);
+
+  const delay = Gtk.DropDown.new_from_strings(LOCK_DELAYS.map((item) => item.label));
+  delay.selected = Math.max(0, LOCK_DELAYS.findIndex(
+    (item) => item.seconds === cfg.lockscreen.autoLockDelaySeconds,
+  ));
+  const syncAutoLock = () => {
+    delay.sensitive = ctx.getConfig().power.screenBlankEnabled;
+    autoLockHint.label = delay.sensitive
+      ? "Wait after the screen turns off"
+      : "Enable Automatic Screen Blank in Power";
+  };
+  syncAutoLock();
+  securityPage.connect("map", syncAutoLock);
+  delay.connect("notify::selected", () => {
+    const current = ctx.getConfig();
+    ctx.updateConfig({
+      ...current,
+      lockscreen: {
+        ...current.lockscreen,
+        autoLockDelaySeconds: LOCK_DELAYS[delay.selected]?.seconds ?? null,
+      },
+    });
+  });
+  autoLockRow.append(autoLockInfo);
+  autoLockRow.append(delay);
 
   // Row 3: Test Lock Screen
   const testLockRow = makeRow(true);
@@ -137,10 +227,15 @@ export function buildSecurityPage(
   testLockRow.append(testLockInfo);
   testLockRow.append(testLockBtn);
 
+  lockGroup.append(previewRow);
   lockGroup.append(lockImageRow);
   lockGroup.append(lockColorRow);
+  lockGroup.append(autoLockRow);
   lockGroup.append(testLockRow);
   securityPage.append(lockGroup);
 
-  return securityPage;
+  return new Gtk.ScrolledWindow({
+    hscrollbar_policy: Gtk.PolicyType.NEVER,
+    child: securityPage,
+  });
 }

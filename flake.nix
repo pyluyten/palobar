@@ -71,6 +71,7 @@
         ags bundle src/app.ts $out/bin/.palobar-bin
 
         wrapProgram $out/bin/palobar-prefs \
+          --prefix PATH : $out/bin \
           --prefix PATH : ${pkgs.lib.makeBinPath [pkgs.swaylock]}
 
         wrapProgram $out/bin/.palobar-bin \

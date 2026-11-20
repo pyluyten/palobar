@@ -17,10 +17,10 @@ import { createPoll } from "ags/time"
 import GLib from "gi://GLib"
 import Gio from "gi://Gio"
 import Auth from "gi://AstalAuth"
-import SessionLock from "gi://Gtk4SessionLock"
+import type SessionLock from "gi://Gtk4SessionLock"
 
 import { lockCss } from "./lock-style"
-import { configService } from "./config"
+import { DEFAULT_CONFIG, loadConfig, type PalobarConfig } from "./config"
 
 // ---------------------------------------------------------------- config ---
 
@@ -81,7 +81,7 @@ function tryUnlock(password: string, entry: Gtk.PasswordEntry) {
 function LockWindow(monitor: Gdk.Monitor): Gtk.Window {
     let entry!: Gtk.PasswordEntry
 
-    const cfg = configService.get()
+    const cfg = loadConfig()
     const bgPath = cfg.lockscreen.image || cfg.wallpaper.path
     const hasBgImage = Boolean(bgPath && GLib.file_test(bgPath, GLib.FileTest.EXISTS))
     const avatar = GLib.file_test(AVATAR, GLib.FileTest.EXISTS)
@@ -196,6 +196,11 @@ function LockWindow(monitor: Gdk.Monitor): Gtk.Window {
         </Gtk.Window>
     ) as Gtk.Window
 
+    const color = fallbackColor(cfg)
+    const background = new Gtk.CssProvider()
+    background.load_from_string(`window.lock-window { background-color: ${color.to_string()}; }`)
+    win.get_style_context().add_provider(background, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
+
     // Le plus important : on associe la fenêtre à l'écran via ext-session-lock
     lock!.assign_window_to_monitor(win, monitor)
     win.present()
@@ -225,14 +230,59 @@ function syncWindows() {
 
 let css_applied = false
 
-export function lockScreen() {
-    if (lock) return // déjà verrouillé
+let lockStarting = false
+let swaylockProcess: Gio.Subprocess | null = null
 
-    if (!SessionLock.is_supported()) {
-        console.error("ext-session-lock-v1 non supporté par ce compositeur")
-        return
+function fallbackColor(cfg: PalobarConfig): Gdk.RGBA {
+    const color = new Gdk.RGBA()
+    if (!color.parse(cfg.lockscreen.color)) color.parse(DEFAULT_CONFIG.lockscreen.color)
+    return color
+}
+
+function startSwaylock() {
+    const cfg = loadConfig()
+    const { red, green, blue } = fallbackColor(cfg)
+    const color = [red, green, blue]
+        .map((value) => Math.round(value * 255).toString(16).padStart(2, "0"))
+        .join("")
+    const args = ["swaylock", "-c", color]
+    const image = cfg.lockscreen.image || cfg.wallpaper.path
+    if (image && GLib.file_test(image, GLib.FileTest.IS_REGULAR)) {
+        args.push("-i", image, "-s", "fill")
     }
 
+    const process = Gio.Subprocess.new(args, Gio.SubprocessFlags.NONE)
+    swaylockProcess = process
+    process.wait_check_async(null, (_process, result) => {
+        try {
+            process.wait_check_finish(result)
+        } catch (err) {
+            console.error("[lockscreen] swaylock failed:", err)
+        } finally {
+            swaylockProcess = null
+        }
+    })
+}
+
+export async function lockScreen() {
+    if (lock || lockStarting || swaylockProcess) return
+
+    lockStarting = true
+    try {
+        const native = await import("gi://Gtk4SessionLock").catch(() => null)
+        if (native?.default.is_supported()) {
+            startNativeLock(native.default)
+        } else {
+            startSwaylock()
+        }
+    } catch (err) {
+        console.error("[lockscreen] failed to start:", err)
+    } finally {
+        lockStarting = false
+    }
+}
+
+function startNativeLock(sessionLock: typeof SessionLock) {
     if (!css_applied) {
         app.apply_css(lockCss)
         css_applied = true
@@ -241,7 +291,7 @@ export function lockScreen() {
     setStage("clock")
     setError("")
 
-    lock = SessionLock.Instance.new()
+    lock = sessionLock.Instance.new()
 
     lock.connect("locked", () => {
         // Le compositeur a bien masqué la session : on peut cacher le reste.
