@@ -98,7 +98,7 @@ function createCaptureWindow(monitor: Gdk.Monitor, index: number): Gtk.Window {
   const dockBox = createMiniDock({
     appsService,
     isAlive: () => alive,
-    onFocusWindow: () => destroyCaptureWindows(),
+    onActivateApp: () => destroyCaptureWindows(),
     onShowApps: () => {
       destroyCaptureWindows();
       openedFromOverview = true;

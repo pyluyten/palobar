@@ -1,6 +1,7 @@
-import { Gtk } from "ags/gtk4";
+import { Gdk, Gtk } from "ags/gtk4";
 import AstalApps from "gi://AstalApps";
 import Gio from "gi://Gio";
+import { addFavoriteApp, configService } from "../services/config";
 import { niri, type NiriWindow } from "../services/niri";
 
 export function resolveAppInfo(
@@ -54,7 +55,8 @@ export function resolveAppInfo(
 export interface MiniDockOptions {
   appsService: AstalApps.Apps;
   isAlive: () => boolean;
-  onFocusWindow: () => void;
+  onActivateApp: () => void;
+  acceptFavorites?: boolean;
   onShowApps?: () => void;
 }
 
@@ -67,73 +69,126 @@ export function createMiniDock(opts: MiniDockOptions): Gtk.Box {
   });
   dockBox.add_css_class("launcher-dock");
 
-  niri.getWindows().then((windows: NiriWindow[]) => {
-    if (!opts.isAlive()) return;
+  let windows: NiriWindow[] = [];
+  let unsubscribe: (() => void) | undefined;
 
-    const seen = new Map<string, NiriWindow>();
-    for (const w of windows) {
-      const key = (w.app_id || w.title || "").trim().toLowerCase();
-      if (!key || seen.has(key)) continue;
-      seen.set(key, w);
+  const appendApp = (
+    name: string,
+    iconName: string,
+    running: boolean,
+    activate: () => void,
+  ) => {
+    const button = new Gtk.Button({ tooltip_text: name });
+    button.add_css_class("launcher-dock-item");
+
+    const item = new Gtk.Box({
+      orientation: Gtk.Orientation.VERTICAL,
+      spacing: 4,
+      halign: Gtk.Align.CENTER,
+    });
+    item.append(new Gtk.Image({ icon_name: iconName, pixel_size: 40 }));
+
+    const dot = new Gtk.Box({
+      width_request: 5,
+      height_request: 5,
+      halign: Gtk.Align.CENTER,
+      opacity: running ? 1 : 0,
+    });
+    dot.add_css_class("launcher-dock-dot");
+    item.append(dot);
+
+    button.set_child(item);
+    button.connect("clicked", () => {
+      opts.onActivateApp();
+      activate();
+    });
+    dockBox.append(button);
+  };
+
+  const appKey = (id: string) => id.trim().toLowerCase().replace(/\.desktop$/, "");
+
+  const rebuild = (favoriteIds: string[]) => {
+    for (let child = dockBox.get_first_child(); child; child = dockBox.get_first_child()) {
+      dockBox.remove(child);
     }
 
-    for (const [, winItem] of seen) {
-      const appId = winItem.app_id || winItem.title || "application";
-      const resolved = resolveAppInfo(appId, opts.appsService);
+    const runningApps = new Map<string, NiriWindow>();
+    for (const window of windows) {
+      const key = appKey(window.app_id || window.title || "");
+      const previous = runningApps.get(key);
+      if (key && (!previous || window.is_focused)) runningApps.set(key, window);
+    }
 
-      const dockBtn = new Gtk.Button({
-        tooltip_text: resolved.name,
+    const appsByEntry = new Map(opts.appsService.list.map((app) => [app.entry, app]));
+    for (const id of favoriteIds) {
+      const favorite = appsByEntry.get(id);
+      if (!favorite) continue;
+
+      const keys = [appKey(id), appKey(favorite.wmClass || "")];
+      const matches = keys.flatMap((key) => {
+        const window = runningApps.get(key);
+        runningApps.delete(key);
+        return window ? [window] : [];
       });
-      dockBtn.add_css_class("launcher-dock-item");
+      const running = matches.find((window) => window.is_focused) ?? matches[0];
+      appendApp(
+        favorite.name,
+        favorite.iconName || "application-x-executable",
+        Boolean(running),
+        () => running ? niri.focusWindow(running.id) : favorite.launch(),
+      );
+    }
 
-      const itemBox = new Gtk.Box({
-        orientation: Gtk.Orientation.VERTICAL,
-        spacing: 4,
-        halign: Gtk.Align.CENTER,
-      });
-
-      const img = new Gtk.Image({
-        icon_name: resolved.iconName,
-        pixel_size: 40,
-      });
-
-      const runningDot = new Gtk.Box({
-        width_request: 5,
-        height_request: 5,
-        halign: Gtk.Align.CENTER,
-      });
-      runningDot.add_css_class("launcher-dock-dot");
-
-      itemBox.append(img);
-      itemBox.append(runningDot);
-      dockBtn.set_child(itemBox);
-
-      dockBtn.connect("clicked", () => {
-        opts.onFocusWindow();
-        niri.focusWindow(winItem.id);
-      });
-
-      dockBox.append(dockBtn);
+    for (const window of runningApps.values()) {
+      const appId = window.app_id || window.title || "application";
+      const { name, iconName } = resolveAppInfo(appId, opts.appsService);
+      appendApp(name, iconName, true, () => niri.focusWindow(window.id));
     }
 
     if (opts.onShowApps) {
-      const showAppsBtn = new Gtk.Button({
+      const showApps = opts.onShowApps;
+      const button = new Gtk.Button({
         tooltip_text: "Show Applications",
-      });
-      showAppsBtn.add_css_class("launcher-dock-item");
-      showAppsBtn.set_child(
-        new Gtk.Image({
+        child: new Gtk.Image({
           icon_name: "view-app-grid-symbolic",
           pixel_size: 32,
         }),
-      );
-      showAppsBtn.connect("clicked", () => opts.onShowApps?.());
-      dockBox.append(showAppsBtn);
+      });
+      button.add_css_class("launcher-dock-item");
+      button.connect("clicked", showApps);
+      dockBox.append(button);
     }
 
-    if (seen.size > 0 || opts.onShowApps) {
-      dockBox.set_visible(true);
+    if (opts.acceptFavorites && !dockBox.get_first_child()) {
+      dockBox.append(new Gtk.Label({
+        label: "Drop an app here to add it to favorites",
+        height_request: 56,
+      }));
     }
+  };
+
+  if (opts.acceptFavorites) {
+    const drop = Gtk.DropTarget.new(AstalApps.Application.$gtype, Gdk.DragAction.COPY);
+    drop.connect("drop", (_target, value) =>
+      value instanceof AstalApps.Application && addFavoriteApp(value.entry),
+    );
+    dockBox.add_controller(drop);
+  }
+
+  rebuild(configService.get().favoriteApps);
+  dockBox.connect("map", () => {
+    unsubscribe = configService.subscribe((cfg) => rebuild(cfg.favoriteApps));
+  });
+  dockBox.connect("unmap", () => {
+    unsubscribe?.();
+    unsubscribe = undefined;
+  });
+  dockBox.set_visible(true);
+
+  niri.getWindows().then((list) => {
+    if (!opts.isAlive()) return;
+    windows = list;
+    rebuild(configService.get().favoriteApps);
   });
 
   return dockBox;

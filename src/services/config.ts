@@ -5,6 +5,7 @@ export type WallpaperMode = "fill" | "fit" | "stretch" | "center" | "tile";
 export type ColorScheme = "default" | "dark";
 
 export interface PalobarConfig {
+  favoriteApps: string[];
   appearance: {
     colorScheme: ColorScheme;
     accentColor: string;
@@ -27,6 +28,7 @@ export interface PalobarConfig {
 }
 
 export const DEFAULT_CONFIG: PalobarConfig = {
+  favoriteApps: [],
   appearance: {
     colorScheme: "default",
     accentColor: "#3584e4",
@@ -56,6 +58,9 @@ export const CONFIG_PATH = GLib.build_filenamev([CONFIG_DIR, "config.json"]);
 
 function mergeConfig(raw: Partial<PalobarConfig>): PalobarConfig {
   return {
+    favoriteApps: Array.isArray(raw.favoriteApps)
+      ? [...new Set(raw.favoriteApps.filter((id) => typeof id === "string" && id.endsWith(".desktop")))]
+      : [],
     appearance: {
       ...DEFAULT_CONFIG.appearance,
       ...(raw.appearance ?? {}),
@@ -92,21 +97,54 @@ export function loadConfig(): PalobarConfig {
   }
 }
 
-export function saveConfig(cfg: PalobarConfig): void {
+function updateConfig(update: (current: PalobarConfig) => PalobarConfig): boolean {
   try {
     GLib.mkdir_with_parents(CONFIG_DIR, 0o755);
     const file = Gio.File.new_for_path(CONFIG_PATH);
-    const json = JSON.stringify(cfg, null, 2) + "\n";
-    file.replace_contents(
-      new TextEncoder().encode(json),
-      null,
-      false,
-      Gio.FileCreateFlags.REPLACE_DESTINATION,
-      null,
-    );
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let current = DEFAULT_CONFIG;
+      let etag: string | null = null;
+      if (file.query_exists(null)) {
+        const [, bytes, version] = file.load_contents(null);
+        current = mergeConfig(JSON.parse(new TextDecoder().decode(bytes)));
+        etag = version;
+      }
+
+      const next = update(current);
+      if (next === current) return true;
+      const json = JSON.stringify(next, null, 2) + "\n";
+      try {
+        const [ok] = file.replace_contents(
+          new TextEncoder().encode(json),
+          etag,
+          false,
+          Gio.FileCreateFlags.REPLACE_DESTINATION,
+          null,
+        );
+        return ok;
+      } catch (err) {
+        if (!(err instanceof GLib.Error) ||
+          !err.matches(Gio.io_error_quark(), Gio.IOErrorEnum.WRONG_ETAG)) throw err;
+      }
+    }
+    throw new Error("Config changed repeatedly while saving");
   } catch (err) {
     console.error("[config] failed to save config:", err);
+    return false;
   }
+}
+
+export function saveConfig(cfg: PalobarConfig): void {
+  updateConfig((current) => ({ ...cfg, favoriteApps: current.favoriteApps }));
+}
+
+export function addFavoriteApp(id: string): boolean {
+  if (!id.endsWith(".desktop")) return false;
+  return updateConfig((current) =>
+    current.favoriteApps.includes(id)
+      ? current
+      : { ...current, favoriteApps: [...current.favoriteApps, id] },
+  );
 }
 
 type ConfigListener = (cfg: PalobarConfig) => void;

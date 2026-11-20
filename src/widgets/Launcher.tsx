@@ -199,6 +199,12 @@ export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
           tooltip_text: item.description || item.name,
         });
         flowChild.add_css_class("launcher-flow-child");
+        const drag = new Gtk.DragSource({ actions: Gdk.DragAction.COPY });
+        drag.connect("prepare", () => Gdk.ContentProvider.new_for_value(item));
+        drag.connect("drag-begin", () => {
+          drag.set_icon(new Gtk.WidgetPaintable({ widget: icon }), 27, 27);
+        });
+        flowChild.add_controller(drag);
         flowBox.append(flowChild);
       }
 
@@ -304,7 +310,8 @@ export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
   const dockBox = createMiniDock({
     appsService,
     isAlive: () => launcherWindow === win,
-    onFocusWindow: () => closeLauncher(),
+    onActivateApp: () => closeLauncher(),
+    acceptFavorites: true,
   });
 
   // --- Main Container ---
