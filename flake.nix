@@ -37,7 +37,7 @@
 
     palobar = pkgs.stdenv.mkDerivation {
       pname = "palobar";
-      version = "0.1.0";
+      version = "26.11.20";
       src = ./.;
 
       nativeBuildInputs = [
@@ -81,6 +81,16 @@
 
         cat > $out/bin/palobar-ctl <<EOF
         #!${pkgs.runtimeShell}
+        case "\''${1:-}" in
+          "")
+            printf '%s\n' 'Usage: palobar-ctl {quit|toggle-launcher|version}'
+            exit 0
+            ;;
+          version)
+            printf '%s\n' '$version'
+            exit 0
+            ;;
+        esac
         if ${agsWithDeps}/bin/ags request "\$@" 2>/dev/null; then
           exit 0
         fi
