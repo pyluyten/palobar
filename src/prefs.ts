@@ -9,6 +9,7 @@ import {
   type PalobarConfig,
 } from "./services/config";
 import { PREFS_CSS, type PrefsContext } from "./prefs/ui";
+import { buildOutputPage } from "./prefs/output";
 import { buildSoundPage } from "./prefs/sound";
 import { buildPowerPage } from "./prefs/power";
 import { buildAppearancePage } from "./prefs/appearance";
@@ -70,6 +71,7 @@ function buildPrefsWindow() {
     hexpand: true,
   });
 
+  stack.add_named(buildOutputPage(win), "output");
   stack.add_named(buildSoundPage(), "sound");
   stack.add_named(buildPowerPage(ctx), "power");
   stack.add_named(buildAppearancePage(win, ctx, syncAppearance), "appearance");
@@ -114,6 +116,11 @@ function buildPrefsWindow() {
   pageHeader.add_css_class("prefs-page-header");
 
   const navItems = [
+    {
+      id: "output",
+      label: "Output",
+      icon: "video-display-symbolic",
+    },
     {
       id: "sound",
       label: "Sound",
@@ -232,6 +239,12 @@ function buildPrefsWindow() {
 app.start({
   instanceName: "palobar-prefs",
   css: PREFS_CSS,
+  requestHandler(_args, respond) {
+    const win = app.get_windows()[0];
+    if (win) win.present();
+    else buildPrefsWindow();
+    respond("");
+  },
   main() {
     buildPrefsWindow();
   },

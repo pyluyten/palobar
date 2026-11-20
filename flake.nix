@@ -73,7 +73,7 @@
 
         wrapProgram $out/bin/palobar-prefs \
           --prefix PATH : $out/bin \
-          --prefix PATH : ${pkgs.lib.makeBinPath [pkgs.swaylock]}
+          --prefix PATH : ${pkgs.lib.makeBinPath [pkgs.bash pkgs.swaylock]}
 
         wrapProgram $out/bin/.palobar-bin \
           --prefix PATH : $out/bin \

@@ -5,21 +5,21 @@ ____
 
 * Top Panel
     - [x] notification tray
-    - [ ] media player
+    - [x] media player
     - [x] workspace button
-    - [ ] clipboard+
+    - [x] clipboard+
     - [ ] power profile
-    - [ ] dark, light
+    - [x] dark, light
     - [ ] night mode
     - [ ] vpn
-    - [ ] screenshot (region)
+    - [x] screenshot (region)
     - [ ] bluetooth
     - [ ] battery
 * Launcher
-    - [ ] text entry
-    - [ ] dock
-    - [ ] pages
-* [ ] Command launcher
+    - [x] text entry
+    - [x] dock
+    - [x] pages
+* [x] Command launcher
 
 
 ## about settings
@@ -31,7 +31,7 @@ ____
 | wifi | todo. |
 | network | todo. |
 | bluetooth | todo. |
-| screens | BELONGS TO NIRI. |
+| screens | *Done* for v1. |
 | sound | todo. IMPORTANT. |
 | energy | todo |
 | multi task | BELONGS TO NIRI. |
@@ -44,7 +44,7 @@ ____
 | mouse | todo |
 | keyb | todo |
 | colors | todo |
-| printers | DONE |
+| printers | *DONE* |
 | accessibilty | todo |
 | private | todo |
 | system | todo |
