@@ -6,7 +6,6 @@ Reproduire le look de gnome-shell sous niri
 
 TOUTE L'INTERFACE EN ANGLAIS.
 
-
 + panel du haut avec 
     - à gauche : "Activites", des symboles représetant les workspace, 
     - au milieu : la date
@@ -36,6 +35,10 @@ La RAM restera légère
 - préférence : mini app isolée
 
 
+AGENTS
+_____
+
+also read AGENTS-local.md
 
 
 archi
