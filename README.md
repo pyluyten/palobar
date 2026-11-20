@@ -36,3 +36,11 @@ Like GNOME, when niri triggers overview
 * a search entry appears
 * a dock appears, allows to click on app
 * if user types, apps appear.
+
+
+# Notes
+
+If you click on the workspaces button in the top bar, niri might move the cursor. You may prevent this if you uncomment this in you `config.kdl`
+
+    // warp-mouse-to-focus
+
