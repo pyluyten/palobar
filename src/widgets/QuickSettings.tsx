@@ -194,7 +194,7 @@ function QuickTogglesSection() {
   return (
     <box class="qs-mini-toggles" spacing={8} homogeneous>
       <button
-        class={`qs-mini-pill ${darkMode((d) => (d ? "active" : ""))}`}
+        class={darkMode((dark) => dark ? "qs-mini-pill active" : "qs-mini-pill")}
         onClicked={() => {
           const current = configService.get();
           const nextScheme =

@@ -1,5 +1,6 @@
 import app from "ags/gtk4/app";
 import { Gdk, Gtk } from "ags/gtk4";
+import { execAsync } from "ags/process";
 import GLib from "gi://GLib";
 import {
   CONFIG_PATH,
@@ -75,6 +76,23 @@ function buildPrefsWindow() {
   stack.add_named(buildPrintersPage(), "printers");
   stack.add_named(buildSecurityPage(win, ctx), "security");
 
+  const gnomeSettingsButton = new Gtk.Button({
+    label: "Open GNOME Settings",
+    halign: Gtk.Align.START,
+    valign: Gtk.Align.START,
+  });
+  gnomeSettingsButton.add_css_class("prefs-btn");
+  gnomeSettingsButton.connect("clicked", () => {
+    execAsync(["env", "XDG_CURRENT_DESKTOP=GNOME", "gnome-control-center"]).catch((err) => {
+      console.error("[prefs] failed to open GNOME Settings:", err);
+      new Gtk.AlertDialog({
+        message: "Could not open GNOME Settings",
+        detail: "Make sure gnome-control-center is installed and available in PATH.",
+      }).show(win);
+    });
+  });
+  stack.add_named(gnomeSettingsButton, "fallback");
+
   // --- Left Sidebar ---
   const sidebar = new Gtk.Box({
     orientation: Gtk.Orientation.VERTICAL,
@@ -120,6 +138,11 @@ function buildPrefsWindow() {
       id: "security",
       label: "Security",
       icon: "system-lock-screen-symbolic",
+    },
+    {
+      id: "fallback",
+      label: "Fallback",
+      icon: "preferences-system-symbolic",
     },
   ];
 
