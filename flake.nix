@@ -24,6 +24,7 @@
       apps
       auth
       battery
+      mpris
       network
       notifd
       tray

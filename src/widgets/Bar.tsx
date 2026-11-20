@@ -8,6 +8,7 @@ import AstalNotifd from "gi://AstalNotifd";
 import { niri, type NiriWorkspace } from "../services/niri";
 import { popups } from "../services/popups";
 import { SysTray } from "./Tray";
+import { MediaControl } from "./MediaControl";
 
 function formatGnomeDate(): string {
   const now = new Date();
@@ -154,14 +155,18 @@ export function Bar(gdkmonitor: Gdk.Monitor, index: number) {
         </box>
 
         {/* Center: Date & Time */}
-        <box $type="center" class="panel-center">
+        <centerbox $type="center" class="panel-center">
+          <box $type="start">
+            <MediaControl />
+          </box>
           <button
+            $type="center"
             class={`panel-button clock-button ${popups.active((p) => (p === "calendar" ? "open" : ""))}`}
             onClicked={() => popups.toggle("calendar")}
           >
             <label label={date} />
           </button>
-        </box>
+        </centerbox>
 
         {/* Right: SysTray + Notification tray + Clipboard + Network + Volume + Session */}
         <box $type="end" class="panel-right" spacing={4}>

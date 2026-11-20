@@ -33,7 +33,8 @@ window.panel-window {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.panel-button {
+.panel-button,
+.media-button > button {
   background: transparent;
   border: none;
   border-radius: 999px;
@@ -547,4 +548,33 @@ window.launcher-window {
 
 .clipboard-thumb {
   border-radius: 8px;
+}
+
+.media-button > button:checked {
+  background-color: $pill-active;
+}
+
+.media-popover > contents {
+  background-color: $popup-bg;
+  border-radius: 18px;
+  color: $panel-fg;
+}
+
+.media-player-list {
+  min-width: 248px;
+}
+
+.media-player {
+  background-color: $card-bg;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.media-player-title {
+  font-weight: 700;
+}
+
+.media-player-subtitle {
+  color: $muted-fg;
+  font-size: 12px;
 }
