@@ -474,6 +474,15 @@ window.launcher-window {
   }
 }
 
+.launcher-dock-item.launcher-show-apps {
+  background-color: rgba(255, 255, 255, 0.09);
+  color: #fff;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.18);
+  }
+}
+
 .launcher-dock-dot {
   background-color: rgba(255, 255, 255, 0.85);
   border-radius: 999px;
@@ -548,6 +557,10 @@ window.launcher-window {
 
 .clipboard-thumb {
   border-radius: 8px;
+}
+
+.media-button.idle > button {
+  color: rgba(246, 245, 244, 0.38);
 }
 
 .media-button > button:checked {

@@ -77,6 +77,12 @@ export function MediaControl() {
   const mpris = AstalMpris.get_default();
   const players = createBinding(mpris, "players")((list) => list ?? []);
 
+  const playing = createComputed(() =>
+    players().some((player) =>
+      createBinding(player, "playback_status")() === AstalMpris.PlaybackStatus.PLAYING,
+    ),
+  );
+
   const popover = new Gtk.Popover({
     position: Gtk.PositionType.BOTTOM,
     child: (
@@ -99,14 +105,14 @@ export function MediaControl() {
 
   return (
     <Gtk.MenuButton
-      class="media-button"
+      class={playing((active) => active ? "media-button" : "media-button idle")}
       iconName="multimedia-player-symbolic"
       tooltipText="Media Controls"
-      visible={players((list) => list.length > 0)}
+      sensitive={players((list) => list.length > 0)}
       popover={popover}
       $={(button) => {
-        button.connect("notify::visible", () => {
-          if (!button.get_visible()) button.popdown();
+        button.connect("notify::sensitive", () => {
+          if (!button.get_sensitive()) button.popdown();
         });
       }}
     />

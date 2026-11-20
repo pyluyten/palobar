@@ -226,6 +226,7 @@ export function createMiniDock(opts: MiniDockOptions): Gtk.Box {
         }),
       });
       button.add_css_class("launcher-dock-item");
+      button.add_css_class("launcher-show-apps");
       button.connect("clicked", showApps);
       dockBox.append(button);
     }
