@@ -303,7 +303,7 @@ export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
   // --- Mini Dock (deduplicated open apps from niri) ---
   const dockBox = createMiniDock({
     appsService,
-    isAlive: () => launcherWindow !== null,
+    isAlive: () => launcherWindow === win,
     onFocusWindow: () => closeLauncher(),
   });
 
@@ -335,7 +335,7 @@ export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
 
   const win = (
     <window
-      visible
+      visible={false}
       name="activities-launcher"
       class="launcher-window"
       gdkmonitor={targetMonitor}
@@ -370,10 +370,13 @@ export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
 
   launcherWindow = win;
   notifyLauncherState(true);
+  win.set_visible(true);
 
   GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-    searchEntry.grab_focus();
-    searchEntry.set_position(-1);
+    if (launcherWindow === win) {
+      searchEntry.grab_focus();
+      searchEntry.set_position(-1);
+    }
     return GLib.SOURCE_REMOVE;
   });
 }

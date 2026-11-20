@@ -38,23 +38,46 @@ function isTypingKey(keyval: number, state: number): string | null {
   return String.fromCodePoint(codepoint);
 }
 
-function updateInputRegion(win: Gtk.Window, widgets: Gtk.Widget[]) {
-  const surface = win.get_surface();
-  if (!surface) return;
+function trackInputRegion(win: Gtk.Window, widgets: Gtk.Widget[]) {
+  win.connect("realize", () => {
+    const surface = win.get_surface();
+    const clock = win.get_frame_clock();
+    if (!surface || !clock) return;
 
-  const region = new Cairo.Region();
-  for (const w of widgets) {
-    if (!w.get_visible()) continue;
-    const [ok, bounds] = w.compute_bounds(win);
-    if (!ok) continue;
-    region.unionRectangle({
-      x: Math.floor(bounds.get_x()),
-      y: Math.floor(bounds.get_y()),
-      width: Math.ceil(bounds.get_width()),
-      height: Math.ceil(bounds.get_height()),
+    let previousBounds = "[]";
+    surface.set_input_region(new Cairo.Region());
+
+    // The dock is populated asynchronously, so measure after GTK allocates it.
+    const layoutHandler = clock.connect_after("layout", () => {
+      const rectangles = widgets.flatMap((widget) => {
+        if (!widget.get_mapped()) return [];
+        const [ok, bounds] = widget.compute_bounds(win);
+        if (!ok || bounds.get_width() <= 0 || bounds.get_height() <= 0) return [];
+
+        const x = Math.floor(bounds.get_x());
+        const y = Math.floor(bounds.get_y());
+        return [{
+          x,
+          y,
+          width: Math.ceil(bounds.get_x() + bounds.get_width()) - x,
+          height: Math.ceil(bounds.get_y() + bounds.get_height()) - y,
+        }];
+      });
+
+      const currentBounds = JSON.stringify(rectangles);
+      if (currentBounds === previousBounds) return;
+      previousBounds = currentBounds;
+
+      const region = new Cairo.Region();
+      for (const rectangle of rectangles) region.unionRectangle(rectangle);
+      surface.set_input_region(region);
     });
-  }
-  surface.set_input_region(region);
+
+    const unrealizeHandler = win.connect("unrealize", () => {
+      clock.disconnect(layoutHandler);
+      win.disconnect(unrealizeHandler);
+    });
+  });
 }
 
 function createCaptureWindow(monitor: Gdk.Monitor, index: number): Gtk.Window {
@@ -81,12 +104,6 @@ function createCaptureWindow(monitor: Gdk.Monitor, index: number): Gtk.Window {
       openedFromOverview = true;
       openLauncher(monitor);
     },
-    onPopulated: () => {
-      GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-        if (alive) updateInputRegion(win, [searchEntry, dockBox]);
-        return GLib.SOURCE_REMOVE;
-      });
-    },
   });
 
   const container = new Gtk.Box({
@@ -104,7 +121,7 @@ function createCaptureWindow(monitor: Gdk.Monitor, index: number): Gtk.Window {
 
   const win = (
     <window
-      visible
+      visible={false}
       name={`overview-capture-${index}`}
       class="overview-capture-window"
       gdkmonitor={monitor}
@@ -162,16 +179,11 @@ function createCaptureWindow(monitor: Gdk.Monitor, index: number): Gtk.Window {
     alive = false;
   });
 
-  win.connect("realize", () => {
-    updateInputRegion(win, [searchEntry, dockBox]);
-  });
-
+  trackInputRegion(win, [searchEntry, dockBox]);
   win.add_controller(keyCtrl);
+  win.set_visible(true);
   GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-    if (alive) {
-      updateInputRegion(win, [searchEntry, dockBox]);
-      searchEntry.grab_focus();
-    }
+    if (alive) searchEntry.grab_focus();
     return GLib.SOURCE_REMOVE;
   });
   return win;

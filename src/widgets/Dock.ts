@@ -56,7 +56,6 @@ export interface MiniDockOptions {
   isAlive: () => boolean;
   onFocusWindow: () => void;
   onShowApps?: () => void;
-  onPopulated?: () => void;
 }
 
 export function createMiniDock(opts: MiniDockOptions): Gtk.Box {
@@ -134,7 +133,6 @@ export function createMiniDock(opts: MiniDockOptions): Gtk.Box {
 
     if (seen.size > 0 || opts.onShowApps) {
       dockBox.set_visible(true);
-      opts.onPopulated?.();
     }
   });
 
