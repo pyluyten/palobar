@@ -85,6 +85,13 @@
         NoDisplay=true
         EOF
 
+        # Keep the standard GTK loaders alongside the WebP loader for previews.
+        mkdir -p $out/share/palobar
+        cat "$GDK_PIXBUF_MODULE_FILE" \
+          ${pkgs.webp-pixbuf-loader}/${pkgs.gdk-pixbuf.binaryDir}/webp-loaders.cache \
+          > $out/share/palobar/loaders.cache
+        export GDK_PIXBUF_MODULE_FILE="$out/share/palobar/loaders.cache"
+
         wrapProgram $out/bin/palobar-prefs \
           --set PALOBAR_GTKSOURCE_LANGUAGE_DIR $out/share/palobar/language-specs \
           --prefix PATH : $out/bin \

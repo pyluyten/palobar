@@ -1,6 +1,4 @@
 import { Gdk, Gtk } from "ags/gtk4";
-import Gio from "gi://Gio";
-import GLib from "gi://GLib";
 import type { WallpaperMode } from "../services/config";
 import {
   ACCENT_COLORS, canSetAppearance, getAccentColor, isDarkStyle,
@@ -240,23 +238,29 @@ export function buildAppearancePage(
   wpPreviewStack.add_named(wpPicture, "image");
   wpPreviewStack.add_named(wpColorBox, "color");
 
-  const refreshPreview = () => {
-    const current = ctx.getConfig();
-    const color = current.wallpaper.color || "#131316";
+  const refreshPreviewColor = () => {
+    const color = ctx.getConfig().wallpaper.color || "#131316";
     previewColorProvider.load_from_string(
       `.wp-preview-solid { background-color: ${color}; }`,
     );
-    if (
-      current.wallpaper.path &&
-      GLib.file_test(current.wallpaper.path, GLib.FileTest.EXISTS)
-    ) {
-      wpPicture.set_file(Gio.File.new_for_path(current.wallpaper.path));
-      wpPreviewStack.set_visible_child_name("image");
-    } else {
-      wpPreviewStack.set_visible_child_name("color");
-    }
   };
-  refreshPreview();
+
+  const refreshPreviewImage = () => {
+    const path = ctx.getConfig().wallpaper.path;
+    let texture: Gdk.Texture | null = null;
+    if (path) {
+      try {
+        texture = Gdk.Texture.new_from_filename(path);
+      } catch (error) {
+        console.warn("[prefs] could not load wallpaper preview:", error);
+      }
+    }
+    wpPicture.set_paintable(texture);
+    wpPreviewStack.set_visible_child_name(texture ? "image" : "color");
+  };
+
+  refreshPreviewColor();
+  refreshPreviewImage();
 
   previewRow.append(wpPreviewStack);
   wpGroup.append(previewRow);
@@ -293,7 +297,7 @@ export function buildAppearancePage(
         wallpaper: { ...current.wallpaper, path },
       });
       wpPathLabel.label = path;
-      refreshPreview();
+      refreshPreviewImage();
     });
   });
 
@@ -306,7 +310,7 @@ export function buildAppearancePage(
       wallpaper: { ...current.wallpaper, path: "" },
     });
     wpPathLabel.label = "None (solid color)";
-    refreshPreview();
+    refreshPreviewImage();
   });
 
   wpImageRow.append(wpImageInfo);
@@ -362,7 +366,7 @@ export function buildAppearancePage(
       ...current,
       wallpaper: { ...current.wallpaper, color: hex },
     });
-    refreshPreview();
+    refreshPreviewColor();
   });
 
   wpColorRow.append(wpColorLabel);
