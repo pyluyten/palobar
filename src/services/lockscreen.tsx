@@ -3,20 +3,28 @@
 // Dépendances système :
 //   - gtk4-session-lock  (typelib Gtk4SessionLock) -> protocole ext-session-lock-v1
 //   - astal-auth         (typelib AstalAuth)       -> authentification PAM
+//   - swaylock (optionnel)                         -> repli si ext-session-lock indisponible
 //
 // Deux étapes, comme GNOME :
 //   "clock"  : fond net, grosse horloge + date
 //   "prompt" : fond flouté/assombri, avatar + nom + champ de mot de passe
 //
-// Utilisation : appeler lock() depuis ton requestHandler (voir app.tsx).
+// Gestion mémoire :
+//   - un scope gnim (createRoot) par fenêtre, libéré à la destruction
+//   - une seule texture de fond partagée entre tous les écrans
+//   - GC forcé peu après le déverrouillage (la mémoire native des textures
+//     n'exerce aucune pression sur le GC de SpiderMonkey)
+//
+// Utilisation : appeler lockScreen() depuis ton requestHandler.
 
 import app from "ags/gtk4/app"
 import { Gtk, Gdk } from "ags/gtk4"
-import { createState } from "ags"
+import { createState, createRoot } from "ags"
 import { createPoll } from "ags/time"
 import GLib from "gi://GLib"
 import Gio from "gi://Gio"
 import Auth from "gi://AstalAuth"
+import System from "system"
 import type SessionLock from "gi://Gtk4SessionLock"
 
 import { lockCss } from "./lock-style"
@@ -31,6 +39,13 @@ const USER_NAME = GLib.get_real_name() === "Unknown" ? GLib.get_user_name() : GL
 
 type Stage = "clock" | "prompt"
 
+type LockWin = {
+    win: Gtk.Window
+    picture: Gtk.Picture | null
+    background: Gtk.CssProvider
+    dispose: () => void
+}
+
 const [stage, setStage] = createState<Stage>("clock")
 const [busy, setBusy] = createState(false)
 const [error, setError] = createState("")
@@ -43,7 +58,8 @@ const date = createPoll("", 30_000, () => {
 
 let lock: SessionLock.Instance | null = null
 let monitorsChangedId: number | null = null
-const windows = new Map<Gdk.Monitor, Gtk.Window>()
+let bgTexture: Gdk.Texture | null = null // partagée entre tous les écrans
+const windows = new Map<Gdk.Monitor, LockWin>()
 // callbacks qui donnent le focus aux champs de saisie quand on passe en "prompt"
 const focusers = new Set<() => void>()
 
@@ -78,133 +94,145 @@ function tryUnlock(password: string, entry: Gtk.PasswordEntry) {
 
 // ----------------------------------------------------------- une fenêtre ---
 
-function LockWindow(monitor: Gdk.Monitor): Gtk.Window {
-    let entry!: Gtk.PasswordEntry
+function LockWindow(monitor: Gdk.Monitor): LockWin {
+    // Tout ce qui est créé ici (bindings, abonnements aux états globaux)
+    // est rattaché à ce scope et coupé par dispose().
+    return createRoot((dispose) => {
+        let entry!: Gtk.PasswordEntry
+        let picture: Gtk.Picture | null = null
 
-    const cfg = loadConfig()
-    const bgPath = cfg.lockscreen.image || cfg.wallpaper.path
-    const hasBgImage = Boolean(bgPath && GLib.file_test(bgPath, GLib.FileTest.EXISTS))
-    const avatar = GLib.file_test(AVATAR, GLib.FileTest.EXISTS)
+        const cfg = loadConfig()
+        const avatar = GLib.file_test(AVATAR, GLib.FileTest.EXISTS)
 
-    const win = (
-        <Gtk.Window
-            class="lock-window"
-            $={(self) => {
-                // N'importe quelle touche / clic sur l'horloge -> prompt ; Échap -> retour
-                const keys = new Gtk.EventControllerKey()
-                keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
-                keys.connect("key-pressed", (_c, keyval) => {
-                    if (stage.get() === "clock") {
-                        setStage("prompt")
-                        return true
-                    }
-                    if (keyval === Gdk.KEY_Escape) {
-                        setStage("clock")
-                        return true
-                    }
-                    return false
-                })
-                self.add_controller(keys)
+        const win = (
+            <Gtk.Window
+                class="lock-window"
+                $={(self) => {
+                    // N'importe quelle touche / clic sur l'horloge -> prompt ; Échap -> retour
+                    const keys = new Gtk.EventControllerKey()
+                    keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+                    keys.connect("key-pressed", (_c, keyval) => {
+                        if (stage.get() === "clock") {
+                            setStage("prompt")
+                            return true
+                        }
+                        if (keyval === Gdk.KEY_Escape) {
+                            setStage("clock")
+                            return true
+                        }
+                        return false
+                    })
+                    self.add_controller(keys)
 
-                const click = new Gtk.GestureClick()
-                click.connect("pressed", () => {
-                    if (stage.get() === "clock") setStage("prompt")
-                })
-                self.add_controller(click)
-            }}
-        >
-            <Gtk.Overlay>
-                {/* Fond : le flou est piloté par la classe CSS "prompt" */}
-                {hasBgImage ? (
-                    <Gtk.Picture
-                        class={stage((s) => (s === "prompt" ? "lock-bg prompt" : "lock-bg"))}
-                        contentFit={Gtk.ContentFit.COVER}
-                        file={Gio.File.new_for_path(bgPath)}
-                        hexpand
-                        vexpand
-                    />
-                ) : (
-                    <Gtk.Box
-                        class={stage((s) => (s === "prompt" ? "lock-bg prompt" : "lock-bg"))}
-                        hexpand
-                        vexpand
-                    />
-                )}
+                    const click = new Gtk.GestureClick()
+                    click.connect("pressed", () => {
+                        if (stage.get() === "clock") setStage("prompt")
+                    })
+                    self.add_controller(click)
+                }}
+            >
+                <Gtk.Overlay>
+                    {/* Fond : le flou est piloté par la classe CSS "prompt" */}
+                    {bgTexture ? (
+                        <Gtk.Picture
+                            $={(self) => (picture = self)}
+                            class={stage((s) => (s === "prompt" ? "lock-bg prompt" : "lock-bg"))}
+                            contentFit={Gtk.ContentFit.COVER}
+                            paintable={bgTexture}
+                            hexpand
+                            vexpand
+                        />
+                    ) : (
+                        <Gtk.Box
+                            class={stage((s) => (s === "prompt" ? "lock-bg prompt" : "lock-bg"))}
+                            hexpand
+                            vexpand
+                        />
+                    )}
 
-                <Gtk.Stack
-                    $type="overlay"
-                    class="lock-stack"
-                    transitionType={Gtk.StackTransitionType.CROSSFADE}
-                    transitionDuration={350}
-                    visibleChildName={stage}
-                >
-                    {/* ---- Étape 1 : horloge ---- */}
-                    <Gtk.Box
-                        $type="named"
-                        name="clock"
-                        orientation={Gtk.Orientation.VERTICAL}
-                        valign={Gtk.Align.CENTER}
-                        halign={Gtk.Align.CENTER}
-                        class="clock-page"
+                    <Gtk.Stack
+                        $type="overlay"
+                        class="lock-stack"
+                        transitionType={Gtk.StackTransitionType.CROSSFADE}
+                        transitionDuration={350}
+                        visibleChildName={stage}
                     >
-                        <Gtk.Label class="lock-time" label={time} />
-                        <Gtk.Label class="lock-date" label={date} />
-                    </Gtk.Box>
-
-                    {/* ---- Étape 2 : mot de passe ---- */}
-                    <Gtk.Box
-                        $type="named"
-                        name="prompt"
-                        orientation={Gtk.Orientation.VERTICAL}
-                        valign={Gtk.Align.CENTER}
-                        halign={Gtk.Align.CENTER}
-                        spacing={14}
-                        class="prompt-page"
-                    >
-                        <Gtk.Box class="lock-avatar" halign={Gtk.Align.CENTER} overflow={Gtk.Overflow.HIDDEN}>
-                            {avatar ? (
-                                <Gtk.Picture
-                                    file={Gio.File.new_for_path(AVATAR)}
-                                    contentFit={Gtk.ContentFit.COVER}
-                                    widthRequest={96}
-                                    heightRequest={96}
-                                />
-                            ) : (
-                                <Gtk.Image iconName="avatar-default-symbolic" pixelSize={56} widthRequest={96} heightRequest={96} />
-                            )}
+                        {/* ---- Étape 1 : horloge ---- */}
+                        <Gtk.Box
+                            $type="named"
+                            name="clock"
+                            orientation={Gtk.Orientation.VERTICAL}
+                            valign={Gtk.Align.CENTER}
+                            halign={Gtk.Align.CENTER}
+                            class="clock-page"
+                        >
+                            <Gtk.Label class="lock-time" label={time} />
+                            <Gtk.Label class="lock-date" label={date} />
                         </Gtk.Box>
 
-                        <Gtk.Label class="lock-username" label={USER_NAME} />
+                        {/* ---- Étape 2 : mot de passe ---- */}
+                        <Gtk.Box
+                            $type="named"
+                            name="prompt"
+                            orientation={Gtk.Orientation.VERTICAL}
+                            valign={Gtk.Align.CENTER}
+                            halign={Gtk.Align.CENTER}
+                            spacing={14}
+                            class="prompt-page"
+                        >
+                            <Gtk.Box class="lock-avatar" halign={Gtk.Align.CENTER} overflow={Gtk.Overflow.HIDDEN}>
+                                {avatar ? (
+                                    <Gtk.Picture
+                                        file={Gio.File.new_for_path(AVATAR)}
+                                        contentFit={Gtk.ContentFit.COVER}
+                                        widthRequest={96}
+                                        heightRequest={96}
+                                    />
+                                ) : (
+                                    <Gtk.Image iconName="avatar-default-symbolic" pixelSize={56} widthRequest={96} heightRequest={96} />
+                                )}
+                            </Gtk.Box>
 
-                        <Gtk.PasswordEntry
-                            $={(self) => {
-                                entry = self
-                                focusers.add(() => self.grab_focus())
-                            }}
-                            class="lock-entry"
-                            placeholderText="Password"
-                            showPeekIcon
-                            widthRequest={260}
-                            sensitive={busy((b) => !b)}
-                            onActivate={(self) => tryUnlock(self.get_text(), self)}
-                        />
+                            <Gtk.Label class="lock-username" label={USER_NAME} />
 
-                        <Gtk.Label class="lock-error" label={error} visible={error((e) => e !== "")} />
-                    </Gtk.Box>
-                </Gtk.Stack>
-            </Gtk.Overlay>
-        </Gtk.Window>
-    ) as Gtk.Window
+                            <Gtk.PasswordEntry
+                                $={(self) => {
+                                    entry = self
+                                    focusers.add(() => self.grab_focus())
+                                }}
+                                class="lock-entry"
+                                placeholderText="Password"
+                                showPeekIcon
+                                widthRequest={260}
+                                sensitive={busy((b) => !b)}
+                                onActivate={(self) => tryUnlock(self.get_text(), self)}
+                            />
 
-    const color = fallbackColor(cfg)
-    const background = new Gtk.CssProvider()
-    background.load_from_string(`window.lock-window { background-color: ${color.to_string()}; }`)
-    win.get_style_context().add_provider(background, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
+                            <Gtk.Label class="lock-error" label={error} visible={error((e) => e !== "")} />
+                        </Gtk.Box>
+                    </Gtk.Stack>
+                </Gtk.Overlay>
+            </Gtk.Window>
+        ) as Gtk.Window
 
-    // Le plus important : on associe la fenêtre à l'écran via ext-session-lock
-    lock!.assign_window_to_monitor(win, monitor)
-    win.present()
-    return win
+        const color = fallbackColor(cfg)
+        const background = new Gtk.CssProvider()
+        background.load_from_string(`window.lock-window { background-color: ${color.to_string()}; }`)
+        win.get_style_context().add_provider(background, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
+
+        // Le plus important : on associe la fenêtre à l'écran via ext-session-lock
+        lock!.assign_window_to_monitor(win, monitor)
+        win.present()
+
+        return { win, picture, background, dispose }
+    })
+}
+
+function destroyWindow(w: LockWin) {
+    w.picture?.set_paintable(null) // lâche la référence à la texture
+    w.win.get_style_context().remove_provider(w.background)
+    w.dispose() // coupe les abonnements gnim (états globaux, polls)
+    w.win.destroy()
 }
 
 function syncWindows() {
@@ -220,7 +248,7 @@ function syncWindows() {
     // écrans débranchés
     for (const [m, w] of windows) {
         if (!m.is_valid()) {
-            w.destroy()
+            destroyWindow(w)
             windows.delete(m)
         }
     }
@@ -282,6 +310,19 @@ export async function lockScreen() {
     }
 }
 
+// Charge le fond UNE fois, partagé par tous les écrans.
+function loadBackground(): Gdk.Texture | null {
+    const cfg = loadConfig()
+    const path = cfg.lockscreen.image || cfg.wallpaper.path
+    if (!path || !GLib.file_test(path, GLib.FileTest.EXISTS)) return null
+    try {
+        return Gdk.Texture.new_from_filename(path)
+    } catch (err) {
+        console.error("[lockscreen] failed to load background:", err)
+        return null
+    }
+}
+
 function startNativeLock(sessionLock: typeof SessionLock) {
     if (!css_applied) {
         app.apply_css(lockCss)
@@ -290,6 +331,7 @@ function startNativeLock(sessionLock: typeof SessionLock) {
 
     setStage("clock")
     setError("")
+    bgTexture = loadBackground()
 
     lock = sessionLock.Instance.new()
 
@@ -314,14 +356,26 @@ function unlock() {
     cleanup()
 }
 
+function gcSoon() {
+    GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
+        System.gc()
+        return GLib.SOURCE_REMOVE
+    })
+}
+
 function cleanup() {
+    if (!lock) return // déjà nettoyé (unlock() puis signal "unlocked")
+
     if (monitorsChangedId !== null) {
         Gdk.Display.get_default()?.get_monitors().disconnect(monitorsChangedId)
         monitorsChangedId = null
     }
-    windows.forEach((w) => w.destroy())
+    windows.forEach(destroyWindow)
     windows.clear()
     focusers.clear()
+    bgTexture = null
     lock = null
     setStage("clock")
+    gcSoon()
 }
+
