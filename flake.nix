@@ -93,6 +93,7 @@
         export GDK_PIXBUF_MODULE_FILE="$out/share/palobar/loaders.cache"
 
         wrapProgram $out/bin/palobar-prefs \
+          --set PALOBAR_VERSION_FILE $out/share/palobar/version \
           --set PALOBAR_GTKSOURCE_LANGUAGE_DIR $out/share/palobar/language-specs \
           --prefix PATH : $out/bin \
           --prefix PATH : ${pkgs.lib.makeBinPath [pkgs.bash]}
@@ -141,6 +142,7 @@
 
     devShells.${system}.default = pkgs.mkShell {
       PALOBAR_GTKSOURCE_LANGUAGE_DIR = "${self}";
+      PALOBAR_VERSION_FILE = "${self}/VERSION";
       packages = [
         agsWithDeps
         pkgs.nodejs

@@ -18,6 +18,7 @@ import { buildAppearancePage } from "./prefs/appearance";
 import { buildSecurityPage } from "./prefs/security";
 import { buildKeyboardPage } from "./prefs/keyboard";
 import { buildPrintersPage } from "./prefs/printers";
+import { buildSystemPage } from "./prefs/system";
 
 function buildPrefsWindow() {
   let cfg: PalobarConfig = loadConfig();
@@ -85,6 +86,7 @@ function buildPrefsWindow() {
   stack.add_named(buildKeyboardPage(win), "keyboard");
   stack.add_named(buildPrintersPage(), "printers");
   stack.add_named(buildSecurityPage(win, ctx), "security");
+  stack.add_named(buildSystemPage(win), "system");
 
   const gnomeSettingsButton = new Gtk.Button({
     label: "Open GNOME Settings",
@@ -163,6 +165,11 @@ function buildPrefsWindow() {
       id: "security",
       label: "Security",
       icon: "system-lock-screen-symbolic",
+    },
+    {
+      id: "system",
+      label: "System",
+      icon: "computer-symbolic",
     },
     {
       id: "fallback",

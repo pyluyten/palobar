@@ -34,6 +34,7 @@ if [ "$component" = ctl ]; then
   exec gjs -m "$appdir/usr/lib/palobar/ctl.mjs" "$@"
 fi
 
+export PALOBAR_VERSION_FILE="$appdir/usr/share/palobar/version"
 export PALOBAR_GTKSOURCE_LANGUAGE_DIR="$appdir/usr/share/palobar/language-specs"
 export XDG_DATA_DIRS="$appdir/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 export GI_TYPELIB_PATH="$appdir/usr/lib/palobar/girepository-1.0${GI_TYPELIB_PATH:+:$GI_TYPELIB_PATH}"
