@@ -15,6 +15,7 @@ import { buildSoundPage } from "./prefs/sound";
 import { buildPowerPage } from "./prefs/power";
 import { buildAppearancePage } from "./prefs/appearance";
 import { buildSecurityPage } from "./prefs/security";
+import { buildKeyboardPage } from "./prefs/keyboard";
 import { buildPrintersPage } from "./prefs/printers";
 
 function buildPrefsWindow() {
@@ -77,6 +78,7 @@ function buildPrefsWindow() {
   stack.add_named(buildPowerPage(ctx), "power");
   stack.add_named(buildNiriPage(win), "niri");
   stack.add_named(buildAppearancePage(win, ctx, syncAppearance), "appearance");
+  stack.add_named(buildKeyboardPage(win), "keyboard");
   stack.add_named(buildPrintersPage(), "printers");
   stack.add_named(buildSecurityPage(win, ctx), "security");
 
@@ -142,6 +144,11 @@ function buildPrefsWindow() {
       id: "appearance",
       label: "Appearance",
       icon: "preferences-desktop-wallpaper-symbolic",
+    },
+    {
+      id: "keyboard",
+      label: "Keyboard",
+      icon: "input-keyboard-symbolic",
     },
     {
       id: "printers",
