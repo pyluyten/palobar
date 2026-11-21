@@ -1,8 +1,9 @@
 import app from "ags/gtk4/app";
 import { Astal, Gdk, Gtk } from "ags/gtk4";
-import AstalApps from "gi://AstalApps";
+import type AstalApps from "gi://AstalApps";
 import GLib from "gi://GLib";
 import { popups } from "../services/popups";
+import { getApps, scheduleGc } from "../services/runtime";
 import { createMiniDock } from "./Dock";
 
 const PAGE_COLS = 8;
@@ -31,6 +32,7 @@ export function closeLauncher() {
     launcherWindow.destroy();
     launcherWindow = null;
     notifyLauncherState(false);
+    scheduleGc(); // les widgets natifs ne sont libérés qu'au passage du GC
   }
 }
 
@@ -54,12 +56,15 @@ export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
   const targetMonitor = monitor ?? app.get_monitors()[0];
   if (!targetMonitor) return;
 
-  const appsService = new AstalApps.Apps();
+  // Instance partagée : on ne ré-indexe plus les applications à chaque ouverture.
+  const appsService = getApps();
   const { TOP, BOTTOM, LEFT, RIGHT } = Astal.WindowAnchor;
 
   let pages: AstalApps.Application[][] = [];
   let pageGrids: Gtk.FlowBox[] = [];
+  let built: boolean[] = []; // pages réellement construites (création paresseuse)
   let currentPage = 0;
+  let allSorted: AstalApps.Application[] | null = null; // trié une seule fois
 
   const stack = new Gtk.Stack({
     transition_type: Gtk.StackTransitionType.SLIDE_LEFT_RIGHT,
@@ -115,8 +120,85 @@ export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
     }
   };
 
+  // Construit UNE page (au plus APPS_PER_PAGE tuiles).
+  const buildPage = (pageApps: AstalApps.Application[]): Gtk.FlowBox => {
+    const flowBox = new Gtk.FlowBox({
+      valign: Gtk.Align.START,
+      halign: Gtk.Align.CENTER,
+      homogeneous: true,
+      max_children_per_line: PAGE_COLS,
+      min_children_per_line: PAGE_COLS,
+      row_spacing: 18,
+      column_spacing: 18,
+      selection_mode: Gtk.SelectionMode.SINGLE,
+      activate_on_single_click: true,
+    });
+    flowBox.add_css_class("launcher-grid");
+
+    for (const item of pageApps) {
+      const tile = new Gtk.Box({
+        orientation: Gtk.Orientation.VERTICAL,
+        spacing: 8,
+        halign: Gtk.Align.CENTER,
+        valign: Gtk.Align.CENTER,
+      });
+      tile.add_css_class("launcher-tile");
+
+      const icon = new Gtk.Image({
+        icon_name: item.iconName || "application-x-executable",
+        pixel_size: 54,
+      });
+      icon.add_css_class("launcher-tile-icon");
+
+      const label = new Gtk.Label({
+        label: item.name,
+        max_width_chars: 13,
+        ellipsize: 3,
+        justify: Gtk.Justification.CENTER,
+      });
+      label.add_css_class("launcher-tile-label");
+
+      tile.append(icon);
+      tile.append(label);
+
+      const flowChild = new Gtk.FlowBoxChild({
+        child: tile,
+        tooltip_text: item.description || item.name,
+      });
+      flowChild.add_css_class("launcher-flow-child");
+      const drag = new Gtk.DragSource({ actions: Gdk.DragAction.COPY });
+      drag.connect("prepare", () => Gdk.ContentProvider.new_for_value(item));
+      drag.connect("drag-begin", () => {
+        drag.set_icon(new Gtk.WidgetPaintable({ widget: icon }), 27, 27);
+      });
+      flowChild.add_controller(drag);
+      flowBox.append(flowChild);
+    }
+
+    flowBox.connect("child-activated", (_box, child) => {
+      const idx = child.get_index();
+      const selected = pageApps[idx];
+      if (selected) launchApp(selected);
+    });
+
+    const first = flowBox.get_child_at_index(0);
+    if (first) flowBox.select_child(first);
+
+    return flowBox;
+  };
+
+  // Construit la page seulement si elle ne l'est pas déjà.
+  const ensurePage = (idx: number) => {
+    if (idx < 0 || idx >= pages.length || built[idx]) return;
+    const flowBox = buildPage(pages[idx]);
+    pageGrids[idx] = flowBox;
+    built[idx] = true;
+    stack.add_named(flowBox, `page-${idx}`);
+  };
+
   const goToPage = (pageIdx: number) => {
     if (pageIdx < 0 || pageIdx >= pages.length) return;
+    ensurePage(pageIdx);
     currentPage = pageIdx;
     stack.set_visible_child_name(`page-${pageIdx}`);
     updatePaginationUi();
@@ -141,12 +223,19 @@ export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
     }
 
     const trimmed = query.trim();
-    const list = trimmed
-      ? appsService.fuzzy_query(trimmed)
-      : [...appsService.list].sort((a, b) => a.name.localeCompare(b.name));
+    let list: AstalApps.Application[];
+    if (trimmed) {
+      list = appsService.fuzzy_query(trimmed);
+    } else {
+      allSorted ??= [...appsService.list].sort((a, b) =>
+        a.name.localeCompare(b.name),
+      );
+      list = allSorted;
+    }
 
     pages = [];
     pageGrids = [];
+    built = [];
     for (let i = 0; i < list.length; i += APPS_PER_PAGE) {
       pages.push(list.slice(i, i + APPS_PER_PAGE));
     }
@@ -154,72 +243,8 @@ export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
       pages.push([]);
     }
 
-    pages.forEach((pageApps, pIdx) => {
-      const flowBox = new Gtk.FlowBox({
-        valign: Gtk.Align.START,
-        halign: Gtk.Align.CENTER,
-        homogeneous: true,
-        max_children_per_line: PAGE_COLS,
-        min_children_per_line: PAGE_COLS,
-        row_spacing: 18,
-        column_spacing: 18,
-        selection_mode: Gtk.SelectionMode.SINGLE,
-        activate_on_single_click: true,
-      });
-      flowBox.add_css_class("launcher-grid");
-
-      for (const item of pageApps) {
-        const tile = new Gtk.Box({
-          orientation: Gtk.Orientation.VERTICAL,
-          spacing: 8,
-          halign: Gtk.Align.CENTER,
-          valign: Gtk.Align.CENTER,
-        });
-        tile.add_css_class("launcher-tile");
-
-        const icon = new Gtk.Image({
-          icon_name: item.iconName || "application-x-executable",
-          pixel_size: 54,
-        });
-        icon.add_css_class("launcher-tile-icon");
-
-        const label = new Gtk.Label({
-          label: item.name,
-          max_width_chars: 13,
-          ellipsize: 3,
-          justify: Gtk.Justification.CENTER,
-        });
-        label.add_css_class("launcher-tile-label");
-
-        tile.append(icon);
-        tile.append(label);
-
-        const flowChild = new Gtk.FlowBoxChild({
-          child: tile,
-          tooltip_text: item.description || item.name,
-        });
-        flowChild.add_css_class("launcher-flow-child");
-        const drag = new Gtk.DragSource({ actions: Gdk.DragAction.COPY });
-        drag.connect("prepare", () => Gdk.ContentProvider.new_for_value(item));
-        drag.connect("drag-begin", () => {
-          drag.set_icon(new Gtk.WidgetPaintable({ widget: icon }), 27, 27);
-        });
-        flowChild.add_controller(drag);
-        flowBox.append(flowChild);
-      }
-
-      flowBox.connect("child-activated", (_box, child) => {
-        const idx = child.get_index();
-        const selected = pageApps[idx];
-        if (selected) launchApp(selected);
-      });
-
-      const first = flowBox.get_child_at_index(0);
-      if (first) flowBox.select_child(first);
-
-      pageGrids.push(flowBox);
-      stack.add_named(flowBox, `page-${pIdx}`);
-
+    // Les points de pagination sont légers : on les crée tous.
+    pages.forEach((_pageApps, pIdx) => {
       const dotBtn = new Gtk.Button({
         width_request: 10,
         height_request: 10,
@@ -229,7 +254,9 @@ export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
       dotsBox.append(dotBtn);
     });
 
+    // Mais seule la première page est construite maintenant.
     currentPage = 0;
+    ensurePage(0);
     stack.set_visible_child_name("page-0");
     updatePaginationUi();
   };
