@@ -5,9 +5,7 @@ import Cairo from "gi://cairo";
 import GLib from "gi://GLib";
 import { niri } from "../services/niri";
 import { popups } from "../services/popups";
-import { scheduleGc,
-         getApps,
-} from "../services/runtime";
+import { getApps, scheduleGc } from "../services/runtime";
 import { createMiniDock } from "./Dock";
 import {
   closeLauncher,
@@ -16,15 +14,14 @@ import {
   openLauncher,
 } from "./Launcher";
 
-let captureWindows: Gtk.Window[] = [];
+let captureDisposers: (() => void)[] = [];
 let openedFromOverview = false;
 
 function destroyCaptureWindows() {
-  for (const win of captureWindows) {
-    win.close();
-    win.destroy();
-  }
-  captureWindows = [];
+  if (!captureDisposers.length) return;
+  const disposeWindows = captureDisposers;
+  captureDisposers = [];
+  for (const dispose of disposeWindows) dispose();
   scheduleGc();
 }
 
@@ -43,7 +40,7 @@ function isTypingKey(keyval: number, state: number): string | null {
 }
 
 function trackInputRegion(win: Gtk.Window, widgets: Gtk.Widget[]) {
-  win.connect("realize", () => {
+  const realizeHandler = win.connect("realize", () => {
     const surface = win.get_surface();
     const clock = win.get_frame_clock();
     if (!surface || !clock) return;
@@ -82,9 +79,10 @@ function trackInputRegion(win: Gtk.Window, widgets: Gtk.Widget[]) {
       win.disconnect(unrealizeHandler);
     });
   });
+  return () => win.disconnect(realizeHandler);
 }
 
-function createCaptureWindow(monitor: Gdk.Monitor, index: number): Gtk.Window {
+function createCaptureWindow(monitor: Gdk.Monitor, index: number) {
   const { TOP, BOTTOM, LEFT, RIGHT } = Astal.WindowAnchor;
   const appsService = getApps();
 
@@ -97,11 +95,8 @@ function createCaptureWindow(monitor: Gdk.Monitor, index: number): Gtk.Window {
   });
   searchEntry.add_css_class("launcher-search");
 
-  let alive = true;
-
-  const dockBox = createMiniDock({
+  const dock = createMiniDock({
     appsService,
-    isAlive: () => alive,
     onActivateApp: () => destroyCaptureWindows(),
     onShowApps: () => {
       destroyCaptureWindows();
@@ -121,28 +116,25 @@ function createCaptureWindow(monitor: Gdk.Monitor, index: number): Gtk.Window {
   const spacer = new Gtk.Box({ vexpand: true });
   container.append(searchEntry);
   container.append(spacer);
-  container.append(dockBox);
+  container.append(dock.widget);
 
-  const win = (
-    <window
-      visible={false}
-      name={`overview-capture-${index}`}
-      class="overview-capture-window"
-      gdkmonitor={monitor}
-      layer={Astal.Layer.OVERLAY}
-      exclusivity={Astal.Exclusivity.IGNORE}
-      keymode={Astal.Keymode.EXCLUSIVE}
-      anchor={TOP | BOTTOM | LEFT | RIGHT}
-      application={app}
-    >
-      {container}
-    </window>
-  ) as Gtk.Window;
+  const win = new Astal.Window({
+    visible: false,
+    name: `overview-capture-${index}`,
+    gdkmonitor: monitor,
+    layer: Astal.Layer.OVERLAY,
+    exclusivity: Astal.Exclusivity.IGNORE,
+    keymode: Astal.Keymode.EXCLUSIVE,
+    anchor: TOP | BOTTOM | LEFT | RIGHT,
+    application: app,
+    child: container,
+  });
+  win.add_css_class("overview-capture-window");
 
   const keyCtrl = new Gtk.EventControllerKey({
     propagation_phase: Gtk.PropagationPhase.CAPTURE,
   });
-  keyCtrl.connect("key-pressed", (_ctrl, keyval, _keycode, state) => {
+  const keyHandler = keyCtrl.connect("key-pressed", (_ctrl, keyval, _keycode, state) => {
     if (
       keyval === Gdk.KEY_Escape ||
       keyval === Gdk.KEY_Return ||
@@ -179,18 +171,23 @@ function createCaptureWindow(monitor: Gdk.Monitor, index: number): Gtk.Window {
     return false;
   });
 
-  win.connect("destroy", () => {
-    alive = false;
-  });
-
-  trackInputRegion(win, [searchEntry, dockBox]);
+  const stopTrackingInputRegion = trackInputRegion(win, [searchEntry, dock.widget]);
   win.add_controller(keyCtrl);
   win.set_visible(true);
-  GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-    if (alive) searchEntry.grab_focus();
+  let focusSource = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+    focusSource = 0;
+    searchEntry.grab_focus();
     return GLib.SOURCE_REMOVE;
   });
-  return win;
+  return () => {
+    if (focusSource) GLib.source_remove(focusSource);
+    keyCtrl.disconnect(keyHandler);
+    stopTrackingInputRegion();
+    dock.dispose();
+    win.set_focus(null);
+    win.set_child(null);
+    win.destroy();
+  };
 }
 
 function syncCapture() {
@@ -215,10 +212,10 @@ function syncCapture() {
     return;
   }
 
-  if (captureWindows.length > 0) return;
+  if (captureDisposers.length > 0) return;
 
   const monitors = app.get_monitors();
-  captureWindows = monitors.map((m, idx) => createCaptureWindow(m, idx));
+  captureDisposers = monitors.map((m, idx) => createCaptureWindow(m, idx));
 }
 
 export function initOverviewCapture() {

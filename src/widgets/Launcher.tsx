@@ -1,6 +1,7 @@
 import app from "ags/gtk4/app";
 import { Astal, Gdk, Gtk } from "ags/gtk4";
 import type AstalApps from "gi://AstalApps";
+import type GObject from "gi://GObject";
 import GLib from "gi://GLib";
 import { popups } from "../services/popups";
 import { getApps, scheduleGc } from "../services/runtime";
@@ -9,8 +10,10 @@ import { createMiniDock } from "./Dock";
 const PAGE_COLS = 8;
 const PAGE_ROWS = 3;
 const APPS_PER_PAGE = PAGE_COLS * PAGE_ROWS;
+const APP_ICON_SIZE = 54;
 
 let launcherWindow: Gtk.Window | null = null;
+let disposeLauncher: (() => void) | null = null;
 const stateListeners = new Set<(open: boolean) => void>();
 
 function notifyLauncherState(open: boolean) {
@@ -27,13 +30,17 @@ export function onLauncherStateChange(
 }
 
 export function closeLauncher() {
-  if (launcherWindow) {
-    launcherWindow.close();
-    launcherWindow.destroy();
-    launcherWindow = null;
-    notifyLauncherState(false);
-    scheduleGc(); // les widgets natifs ne sont libérés qu'au passage du GC
-  }
+  const window = launcherWindow;
+  if (!window) return;
+
+  launcherWindow = null;
+  disposeLauncher?.();
+  disposeLauncher = null;
+  window.set_focus(null);
+  window.set_child(null);
+  window.destroy();
+  notifyLauncherState(false);
+  scheduleGc();
 }
 
 export function isLauncherOpen(): boolean {
@@ -58,16 +65,19 @@ export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
 
   // Instance partagée : on ne ré-indexe plus les applications à chaque ouverture.
   const appsService = getApps();
+  const iconTheme = Gtk.IconTheme.get_for_display(targetMonitor.get_display());
   const { TOP, BOTTOM, LEFT, RIGHT } = Astal.WindowAnchor;
 
-  let pages: AstalApps.Application[][] = [];
-  let pageGrids: Gtk.FlowBox[] = [];
-  let built: boolean[] = []; // pages réellement construites (création paresseuse)
+  let results: AstalApps.Application[] = [];
   let currentPage = 0;
-  let allSorted: AstalApps.Application[] | null = null; // trié une seule fois
+  let allSorted: AstalApps.Application[] | null = null;
+  let focusSource = 0;
+  const disconnectSignals: (() => void)[] = [];
+  const trackSignal = (object: GObject.Object, id: number) => {
+    disconnectSignals.push(() => object.disconnect(id));
+  };
 
   const stack = new Gtk.Stack({
-    transition_type: Gtk.StackTransitionType.SLIDE_LEFT_RIGHT,
     transition_duration: 220,
     hexpand: true,
     vexpand: true,
@@ -99,29 +109,7 @@ export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
     application.launch();
   };
 
-  const updatePaginationUi = () => {
-    const total = pages.length;
-    prevBtn.set_visible(total > 1);
-    nextBtn.set_visible(total > 1);
-    prevBtn.set_sensitive(currentPage > 0);
-    nextBtn.set_sensitive(currentPage < total - 1);
-    dotsBox.set_visible(total > 1);
-
-    let dot = dotsBox.get_first_child();
-    let idx = 0;
-    while (dot) {
-      if (idx === currentPage) {
-        dot.add_css_class("active");
-      } else {
-        dot.remove_css_class("active");
-      }
-      dot = dot.get_next_sibling();
-      idx++;
-    }
-  };
-
-  // Construit UNE page (au plus APPS_PER_PAGE tuiles).
-  const buildPage = (pageApps: AstalApps.Application[]): Gtk.FlowBox => {
+  const buildPage = () => {
     const flowBox = new Gtk.FlowBox({
       valign: Gtk.Align.START,
       halign: Gtk.Align.CENTER,
@@ -135,7 +123,7 @@ export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
     });
     flowBox.add_css_class("launcher-grid");
 
-    for (const item of pageApps) {
+    const tiles = Array.from({ length: APPS_PER_PAGE }, () => {
       const tile = new Gtk.Box({
         orientation: Gtk.Orientation.VERTICAL,
         spacing: 8,
@@ -144,14 +132,10 @@ export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
       });
       tile.add_css_class("launcher-tile");
 
-      const icon = new Gtk.Image({
-        icon_name: item.iconName || "application-x-executable",
-        pixel_size: 54,
-      });
+      const icon = new Gtk.Image({ pixel_size: APP_ICON_SIZE });
       icon.add_css_class("launcher-tile-icon");
 
       const label = new Gtk.Label({
-        label: item.name,
         max_width_chars: 13,
         ellipsize: 3,
         justify: Gtk.Justification.CENTER,
@@ -163,101 +147,120 @@ export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
 
       const flowChild = new Gtk.FlowBoxChild({
         child: tile,
-        tooltip_text: item.description || item.name,
+        visible: false,
       });
       flowChild.add_css_class("launcher-flow-child");
       const drag = new Gtk.DragSource({ actions: Gdk.DragAction.COPY });
-      drag.connect("prepare", () => Gdk.ContentProvider.new_for_value(item));
-      drag.connect("drag-begin", () => {
+      const slot = {
+        child: flowChild,
+        icon,
+        label,
+        application: null as AstalApps.Application | null,
+      };
+      trackSignal(drag, drag.connect("prepare", () =>
+        slot.application ? Gdk.ContentProvider.new_for_value(slot.application) : null,
+      ));
+      trackSignal(drag, drag.connect("drag-begin", () => {
         drag.set_icon(new Gtk.WidgetPaintable({ widget: icon }), 27, 27);
-      });
+      }));
+      trackSignal(drag, drag.connect("drag-end", () => drag.set_icon(null, 0, 0)));
       flowChild.add_controller(drag);
       flowBox.append(flowChild);
-    }
-
-    flowBox.connect("child-activated", (_box, child) => {
-      const idx = child.get_index();
-      const selected = pageApps[idx];
-      if (selected) launchApp(selected);
+      return slot;
     });
 
-    const first = flowBox.get_child_at_index(0);
-    if (first) flowBox.select_child(first);
+    trackSignal(flowBox, flowBox.connect("child-activated", (_box, child) => {
+      const application = tiles[child.get_index()]?.application;
+      if (application) launchApp(application);
+    }));
 
-    return flowBox;
+    return { flowBox, tiles };
   };
 
-  // Construit la page seulement si elle ne l'est pas déjà.
-  const ensurePage = (idx: number) => {
-    if (idx < 0 || idx >= pages.length || built[idx]) return;
-    const flowBox = buildPage(pages[idx]);
-    pageGrids[idx] = flowBox;
-    built[idx] = true;
-    stack.add_named(flowBox, `page-${idx}`);
+  // Deux grilles suffisent pour animer une transition sans reconstruire les tuiles.
+  const grids = [buildPage()];
+  stack.add_named(grids[0].flowBox, "grid-0");
+  let activeGrid = 0;
+  const dots: Gtk.Button[] = [];
+  const pageCount = () => Math.ceil(results.length / APPS_PER_PAGE);
+
+  const updatePaginationUi = () => {
+    const total = pageCount();
+    prevBtn.set_visible(total > 1);
+    nextBtn.set_visible(total > 1);
+    prevBtn.set_sensitive(currentPage > 0);
+    nextBtn.set_sensitive(currentPage < total - 1);
+    dotsBox.set_visible(total > 1);
+
+    while (dots.length < total) {
+      const page = dots.length;
+      const dot = new Gtk.Button({ width_request: 10, height_request: 10 });
+      dot.add_css_class("launcher-dot");
+      trackSignal(dot, dot.connect("clicked", () => goToPage(page)));
+      dots.push(dot);
+      dotsBox.append(dot);
+    }
+
+    dots.forEach((dot, index) => {
+      dot.set_visible(index < total);
+      if (index === currentPage) dot.add_css_class("active");
+      else dot.remove_css_class("active");
+    });
   };
 
-  const goToPage = (pageIdx: number) => {
-    if (pageIdx < 0 || pageIdx >= pages.length) return;
-    ensurePage(pageIdx);
-    currentPage = pageIdx;
-    stack.set_visible_child_name(`page-${pageIdx}`);
+  const fillPage = (grid: ReturnType<typeof buildPage>, page: number) => {
+    const offset = page * APPS_PER_PAGE;
+    grid.flowBox.unselect_all();
+    grid.tiles.forEach((slot, index) => {
+      const application = results[offset + index] ?? null;
+      if (slot.application === application) return;
+      slot.application = application;
+      // GTK's background icon loading can race with rapid window teardown.
+      const paintable = application ? iconTheme.lookup_icon(
+        application.iconName || "application-x-executable",
+        null,
+        APP_ICON_SIZE,
+        targetMonitor.get_scale_factor(),
+        slot.icon.get_direction(),
+        Gtk.IconLookupFlags.NONE,
+      ) : null;
+      slot.icon.set_from_paintable(paintable);
+      slot.child.set_visible(application !== null);
+      slot.label.set_label(application?.name ?? "");
+      slot.child.set_tooltip_text(application ? application.description || application.name : null);
+    });
+    if (grid.tiles[0].application) grid.flowBox.select_child(grid.tiles[0].child);
+  };
+
+  const goToPage = (page: number) => {
+    if (page < 0 || page >= pageCount() || page === currentPage) return;
+    const transition = page > currentPage
+      ? Gtk.StackTransitionType.SLIDE_LEFT : Gtk.StackTransitionType.SLIDE_RIGHT;
+    activeGrid = 1 - activeGrid;
+    if (!grids[activeGrid]) {
+      const grid = buildPage();
+      grids.push(grid);
+      stack.add_named(grid.flowBox, `grid-${activeGrid}`);
+    }
+    currentPage = page;
+    fillPage(grids[activeGrid], page);
+    stack.set_visible_child_full(`grid-${activeGrid}`, transition);
     updatePaginationUi();
   };
 
-  prevBtn.connect("clicked", () => goToPage(currentPage - 1));
-  nextBtn.connect("clicked", () => goToPage(currentPage + 1));
+  trackSignal(prevBtn, prevBtn.connect("clicked", () => goToPage(currentPage - 1)));
+  trackSignal(nextBtn, nextBtn.connect("clicked", () => goToPage(currentPage + 1)));
 
   const renderApps = (query: string) => {
-    let oldChild = stack.get_first_child();
-    while (oldChild) {
-      const next = oldChild.get_next_sibling();
-      stack.remove(oldChild);
-      oldChild = next;
-    }
-
-    let oldDot = dotsBox.get_first_child();
-    while (oldDot) {
-      const next = oldDot.get_next_sibling();
-      dotsBox.remove(oldDot);
-      oldDot = next;
-    }
-
     const trimmed = query.trim();
-    let list: AstalApps.Application[];
     if (trimmed) {
-      list = appsService.fuzzy_query(trimmed);
+      results = appsService.fuzzy_query(trimmed);
     } else {
-      allSorted ??= [...appsService.list].sort((a, b) =>
-        a.name.localeCompare(b.name),
-      );
-      list = allSorted;
+      allSorted ??= [...appsService.list].sort((a, b) => a.name.localeCompare(b.name));
+      results = allSorted;
     }
-
-    pages = [];
-    pageGrids = [];
-    built = [];
-    for (let i = 0; i < list.length; i += APPS_PER_PAGE) {
-      pages.push(list.slice(i, i + APPS_PER_PAGE));
-    }
-    if (pages.length === 0) {
-      pages.push([]);
-    }
-
-    // Les points de pagination sont légers : on les crée tous.
-    pages.forEach((_pageApps, pIdx) => {
-      const dotBtn = new Gtk.Button({
-        width_request: 10,
-        height_request: 10,
-      });
-      dotBtn.add_css_class("launcher-dot");
-      dotBtn.connect("clicked", () => goToPage(pIdx));
-      dotsBox.append(dotBtn);
-    });
-
-    // Mais seule la première page est construite maintenant.
     currentPage = 0;
-    ensurePage(0);
-    stack.set_visible_child_name("page-0");
+    fillPage(grids[activeGrid], currentPage);
     updatePaginationUi();
   };
 
@@ -271,30 +274,19 @@ export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
   });
   searchEntry.add_css_class("launcher-search");
 
-  searchEntry.connect("changed", () => {
-    renderApps(searchEntry.text);
-  });
-
-  searchEntry.connect("activate", () => {
-    const firstPage = pages[0];
-    if (firstPage && firstPage.length > 0) {
-      launchApp(firstPage[0]);
-    }
-  });
+  trackSignal(searchEntry, searchEntry.connect("changed", () => renderApps(searchEntry.text)));
+  trackSignal(searchEntry, searchEntry.connect("activate", () => {
+    if (results[0]) launchApp(results[0]);
+  }));
 
   const searchKeyCtrl = new Gtk.EventControllerKey();
-  searchKeyCtrl.connect("key-pressed", (_ctrl, keyval) => {
-    if (keyval === Gdk.KEY_Down) {
-      const grid = pageGrids[currentPage];
-      const first = grid?.get_child_at_index(0);
-      if (first) {
-        grid.select_child(first);
-        first.grab_focus();
-        return true;
-      }
-    }
-    return false;
-  });
+  trackSignal(searchKeyCtrl, searchKeyCtrl.connect("key-pressed", (_ctrl, keyval) => {
+    const { flowBox, tiles: [first] } = grids[activeGrid];
+    if (keyval !== Gdk.KEY_Down || !first.application) return false;
+    flowBox.select_child(first.child);
+    first.child.grab_focus();
+    return true;
+  }));
   searchEntry.add_controller(searchKeyCtrl);
 
   renderApps(initialQuery ?? "");
@@ -316,7 +308,7 @@ export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
       Gtk.EventControllerScrollFlags.HORIZONTAL,
   });
   let lastScrollTime = 0;
-  scrollCtrl.connect("scroll", (_ctrl, dx, dy) => {
+  trackSignal(scrollCtrl, scrollCtrl.connect("scroll", (_ctrl, dx, dy) => {
     const now = GLib.get_monotonic_time();
     if (now - lastScrollTime < 220_000) return false;
     const delta = Math.abs(dx) > Math.abs(dy) ? dx : dy;
@@ -330,13 +322,12 @@ export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
       return true;
     }
     return false;
-  });
+  }));
   gridRow.add_controller(scrollCtrl);
 
   // --- Mini Dock (deduplicated open apps from niri) ---
-  const dockBox = createMiniDock({
+  const dock = createMiniDock({
     appsService,
-    isAlive: () => launcherWindow === win,
     onActivateApp: () => closeLauncher(),
     acceptFavorites: true,
   });
@@ -357,34 +348,35 @@ export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
   container.append(searchEntry);
   container.append(gridRow);
   container.append(dotsBox);
-  container.append(dockBox);
+  container.append(dock.widget);
 
   const backdropClick = new Gtk.GestureClick();
-  backdropClick.connect("released", (_gesture, _n, x, y) => {
+  trackSignal(backdropClick, backdropClick.connect("released", (_gesture, _n, x, y) => {
     const picked = launcherWindow?.pick(x, y, Gtk.PickFlags.DEFAULT);
     if (picked === launcherWindow || picked === container) {
       closeLauncher();
     }
-  });
+  }));
 
-  const win = (
-    <window
-      visible={false}
-      name="activities-launcher"
-      class="launcher-window"
-      gdkmonitor={targetMonitor}
-      layer={Astal.Layer.OVERLAY}
-      exclusivity={Astal.Exclusivity.IGNORE}
-      keymode={Astal.Keymode.EXCLUSIVE}
-      anchor={TOP | BOTTOM | LEFT | RIGHT}
-      application={app}
-    >
-      {container}
-    </window>
-  ) as Gtk.Window;
+  const win = new Astal.Window({
+    visible: false,
+    name: "activities-launcher",
+    gdkmonitor: targetMonitor,
+    layer: Astal.Layer.OVERLAY,
+    exclusivity: Astal.Exclusivity.IGNORE,
+    keymode: Astal.Keymode.EXCLUSIVE,
+    anchor: TOP | BOTTOM | LEFT | RIGHT,
+    application: app,
+    child: container,
+  });
+  win.add_css_class("launcher-window");
+  trackSignal(win, win.connect("close-request", () => {
+    closeLauncher();
+    return true;
+  }));
 
   const winKeyCtrl = new Gtk.EventControllerKey();
-  winKeyCtrl.connect("key-pressed", (_ctrl, keyval) => {
+  trackSignal(winKeyCtrl, winKeyCtrl.connect("key-pressed", (_ctrl, keyval) => {
     if (keyval === Gdk.KEY_Escape) {
       closeLauncher();
       return true;
@@ -398,19 +390,24 @@ export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
       return true;
     }
     return false;
-  });
+  }));
   win.add_controller(winKeyCtrl);
   win.add_controller(backdropClick);
 
   launcherWindow = win;
+  disposeLauncher = () => {
+    dock.dispose();
+    if (focusSource) GLib.source_remove(focusSource);
+    for (const disconnect of disconnectSignals) disconnect();
+    disconnectSignals.length = 0;
+  };
   notifyLauncherState(true);
   win.set_visible(true);
 
-  GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-    if (launcherWindow === win) {
-      searchEntry.grab_focus();
-      searchEntry.set_position(-1);
-    }
+  focusSource = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+    focusSource = 0;
+    searchEntry.grab_focus();
+    searchEntry.set_position(-1);
     return GLib.SOURCE_REMOVE;
   });
 }

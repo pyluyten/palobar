@@ -29,7 +29,7 @@ export function resolveAppInfo(
   }
 
   const lower = appId.toLowerCase();
-  const match = appsService.list.find(
+  const match = list.find(
     (a) =>
       a.entry?.toLowerCase().replace(/\.desktop$/, "") === lower ||
       a.wmClass?.toLowerCase() === lower ||
@@ -56,13 +56,12 @@ export function resolveAppInfo(
 
 export interface MiniDockOptions {
   appsService: AstalApps.Apps;
-  isAlive: () => boolean;
   onActivateApp: () => void;
   acceptFavorites?: boolean;
   onShowApps?: () => void;
 }
 
-export function createMiniDock(opts: MiniDockOptions): Gtk.Box {
+export function createMiniDock(opts: MiniDockOptions) {
   const dockBox = new Gtk.Box({
     spacing: 8,
     halign: Gtk.Align.CENTER,
@@ -71,6 +70,9 @@ export function createMiniDock(opts: MiniDockOptions): Gtk.Box {
   });
   dockBox.add_css_class("launcher-dock");
 
+  let disposed = false;
+  const itemSignals: (() => void)[] = [];
+  let disposeMenu: (() => void) | null = null;
   let windows: NiriWindow[] = [];
   let unsubscribe: (() => void) | undefined;
   let contextMenu: Gtk.Popover | null = null;
@@ -79,6 +81,8 @@ export function createMiniDock(opts: MiniDockOptions): Gtk.Box {
     const menu = contextMenu;
     if (!menu) return;
     contextMenu = null;
+    disposeMenu?.();
+    disposeMenu = null;
     menu.popdown();
     menu.unparent();
   };
@@ -111,20 +115,21 @@ export function createMiniDock(opts: MiniDockOptions): Gtk.Box {
     item.append(dot);
 
     button.set_child(item);
-    button.connect("clicked", () => {
+    const clickedId = button.connect("clicked", () => {
       opts.onActivateApp();
       activate();
     });
+    itemSignals.push(() => button.disconnect(clickedId));
     if (desktop || favoriteId) {
       const rightClick = new Gtk.GestureClick({ button: Gdk.BUTTON_SECONDARY });
-      rightClick.connect("pressed", (gesture) => {
+      const pressedId = rightClick.connect("pressed", (gesture) => {
         gesture.set_state(Gtk.EventSequenceState.CLAIMED);
         closeContextMenu();
 
         const actions = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 4 });
         const menu = new Gtk.Popover({ child: actions, position: Gtk.PositionType.TOP });
         const newWindow = new Gtk.Button({ label: "New Window", sensitive: Boolean(desktop) });
-        newWindow.connect("clicked", () => {
+        const newWindowId = newWindow.connect("clicked", () => {
           if (!desktop) return;
           const context = button.get_display().get_app_launch_context();
           closeContextMenu();
@@ -140,29 +145,32 @@ export function createMiniDock(opts: MiniDockOptions): Gtk.Box {
           }
         });
         actions.append(newWindow);
+        const menuSignals = [() => newWindow.disconnect(newWindowId)];
 
         const desktopId = desktop?.get_id();
         if (favoriteId || desktopId?.endsWith(".desktop")) {
           const favorite = new Gtk.Button({
             label: favoriteId ? "Remove from Favorites" : "Add to Favorites",
           });
-          favorite.connect("clicked", () => {
+          const favoriteSignal = favorite.connect("clicked", () => {
             closeContextMenu();
             if (favoriteId) removeFavoriteApp(favoriteId);
             else if (desktopId) addFavoriteApp(desktopId);
           });
+          menuSignals.push(() => favorite.disconnect(favoriteSignal));
           actions.append(favorite);
         }
 
-        menu.connect("closed", () => {
-          if (contextMenu !== menu) return;
-          contextMenu = null;
-          menu.unparent();
-        });
+        const closedId = menu.connect("closed", closeContextMenu);
+        disposeMenu = () => {
+          menu.disconnect(closedId);
+          for (const disconnect of menuSignals) disconnect();
+        };
         contextMenu = menu;
         menu.set_parent(button);
         menu.popup();
       });
+      itemSignals.push(() => rightClick.disconnect(pressedId));
       button.add_controller(rightClick);
     }
     dockBox.append(button);
@@ -170,14 +178,17 @@ export function createMiniDock(opts: MiniDockOptions): Gtk.Box {
 
   const appKey = (id: string) => id.trim().toLowerCase().replace(/\.desktop$/, "");
 
-  const rebuild = (favoriteIds: string[]) => {
+  const clearItems = () => {
     closeContextMenu();
+    for (const disconnect of itemSignals) disconnect();
+    itemSignals.length = 0;
     for (let child = dockBox.get_first_child(); child; child = dockBox.get_first_child()) {
       dockBox.remove(child);
     }
-    
+  };
 
-
+  const rebuild = (favoriteIds: string[]) => {
+    clearItems();
     const runningApps = new Map<string, NiriWindow>();
     for (const window of windows) {
       const key = appKey(window.app_id || window.title || "");
@@ -216,7 +227,7 @@ export function createMiniDock(opts: MiniDockOptions): Gtk.Box {
 
     for (const window of runningApps.values()) {
       const appId = window.app_id || window.title || "application";
-      const { name, iconName, desktop } = resolveAppInfo(appId, opts.appsService);
+      const { name, iconName, desktop } = resolveAppInfo(appId, opts.appsService, allApps);
       appendApp(name, iconName, true, () => niri.focusWindow(window.id), desktop);
     }
 
@@ -231,7 +242,8 @@ export function createMiniDock(opts: MiniDockOptions): Gtk.Box {
       });
       button.add_css_class("launcher-dock-item");
       button.add_css_class("launcher-show-apps");
-      button.connect("clicked", showApps);
+      const clickedId = button.connect("clicked", showApps);
+      itemSignals.push(() => button.disconnect(clickedId));
       dockBox.append(button);
     }
 
@@ -243,30 +255,42 @@ export function createMiniDock(opts: MiniDockOptions): Gtk.Box {
     }
   };
 
+  let disconnectDrop: (() => void) | undefined;
   if (opts.acceptFavorites) {
     const drop = Gtk.DropTarget.new(AstalApps.Application.$gtype, Gdk.DragAction.COPY);
-    drop.connect("drop", (_target, value) =>
+    const dropId = drop.connect("drop", (_target, value) =>
       value instanceof AstalApps.Application && addFavoriteApp(value.entry),
     );
+    disconnectDrop = () => drop.disconnect(dropId);
     dockBox.add_controller(drop);
   }
 
-  rebuild(configService.get().favoriteApps);
-  dockBox.connect("map", () => {
+  const mapId = dockBox.connect("map", () => {
     unsubscribe = configService.subscribe((cfg) => rebuild(cfg.favoriteApps));
   });
-  dockBox.connect("unmap", () => {
+  const unmap = () => {
     closeContextMenu();
     unsubscribe?.();
     unsubscribe = undefined;
-  });
+  };
+  const unmapId = dockBox.connect("unmap", unmap);
   dockBox.set_visible(true);
 
   niri.getWindows().then((list) => {
-    if (!opts.isAlive()) return;
+    if (disposed) return;
     windows = list;
     rebuild(configService.get().favoriteApps);
   });
 
-  return dockBox;
+  return {
+    widget: dockBox,
+    dispose() {
+      disposed = true;
+      dockBox.disconnect(mapId);
+      dockBox.disconnect(unmapId);
+      unmap();
+      disconnectDrop?.();
+      clearItems();
+    },
+  };
 }
