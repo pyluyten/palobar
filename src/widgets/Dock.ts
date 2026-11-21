@@ -4,10 +4,11 @@ import Gio from "gi://Gio";
 import { addFavoriteApp, configService, removeFavoriteApp } from "../services/config";
 import { niri, type NiriWindow } from "../services/niri";
 
+
 export function resolveAppInfo(
   appId: string,
   appsService: AstalApps.Apps,
-): { name: string; iconName: string; desktop?: Gio.DesktopAppInfo } {
+  list: AstalApps.Application[] = appsService.list) {
   const desktopCandidates = [
     appId,
     `${appId}.desktop`,
@@ -174,6 +175,8 @@ export function createMiniDock(opts: MiniDockOptions): Gtk.Box {
     for (let child = dockBox.get_first_child(); child; child = dockBox.get_first_child()) {
       dockBox.remove(child);
     }
+    
+
 
     const runningApps = new Map<string, NiriWindow>();
     for (const window of windows) {
@@ -182,7 +185,8 @@ export function createMiniDock(opts: MiniDockOptions): Gtk.Box {
       if (key && (!previous || window.is_focused)) runningApps.set(key, window);
     }
 
-    const appsByEntry = new Map(opts.appsService.list.map((app) => [app.entry, app]));
+    const allApps = opts.appsService.list;
+    const appsByEntry = new Map(allApps.map((app) => [app.entry, app]));
     for (const id of favoriteIds) {
       const favorite = appsByEntry.get(id);
       const desktop = Gio.DesktopAppInfo.new(id) ?? undefined;

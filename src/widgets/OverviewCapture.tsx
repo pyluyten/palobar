@@ -5,6 +5,9 @@ import Cairo from "gi://cairo";
 import GLib from "gi://GLib";
 import { niri } from "../services/niri";
 import { popups } from "../services/popups";
+import { scheduleGc,
+         getApps,
+} from "../services/runtime";
 import { createMiniDock } from "./Dock";
 import {
   closeLauncher,
