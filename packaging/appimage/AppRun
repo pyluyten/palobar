@@ -1,0 +1,47 @@
+#!/bin/sh
+set -eu
+
+appdir=$(dirname "$(readlink -f "$0")")
+export PATH="$appdir/usr/bin:$PATH"
+
+case "${0##*/}" in
+  palobar-prefs) component=prefs ;;
+  palobar-run-command) component=run-command ;;
+  palobar-ctl) component=ctl ;;
+  *)
+    component=daemon
+    case "${1:-}" in
+      prefs|run-command|ctl) component=$1; shift ;;
+      --help|-h)
+        printf '%s\n' 'Usage: Palobar.AppImage [prefs|run-command|ctl COMMAND]'
+        exit ;;
+    esac ;;
+esac
+
+if [ "$component" = ctl ]; then
+  case "${1:-}" in
+    '') printf '%s\n' 'Usage: Palobar.AppImage ctl {lock|quit|toggle-launcher|run-command|version}'; exit ;;
+    version) cat "$appdir/usr/share/palobar/version"; exit ;;
+  esac
+fi
+
+if ! command -v gjs >/dev/null; then
+  printf '%s\n' 'Palobar requires GJS from the host distribution.' >&2
+  exit 1
+fi
+
+if [ "$component" = ctl ]; then
+  exec gjs -m "$appdir/usr/lib/palobar/ctl.mjs" "$@"
+fi
+
+export PALOBAR_GTKSOURCE_LANGUAGE_DIR="$appdir/usr/share/palobar/language-specs"
+export XDG_DATA_DIRS="$appdir/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+export GI_TYPELIB_PATH="$appdir/usr/lib/palobar/girepository-1.0${GI_TYPELIB_PATH:+:$GI_TYPELIB_PATH}"
+
+# Preserve the host environment for commands launched by GJS.
+export PALOBAR_HOST_LD_PRELOAD="${LD_PRELOAD-}"
+export PALOBAR_HOST_LD_LIBRARY_PATH="${LD_LIBRARY_PATH-}"
+private_lib="$appdir/usr/lib/palobar"
+LD_PRELOAD="$private_lib/libgtk4-layer-shell.so.0${LD_PRELOAD:+:$LD_PRELOAD}" \
+LD_LIBRARY_PATH="$private_lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+  exec gjs -m "$private_lib/$component.mjs" "$@"

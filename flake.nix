@@ -37,7 +37,7 @@
 
     palobar = pkgs.stdenv.mkDerivation {
       pname = "palobar";
-      version = "26.11.20";
+      version = pkgs.lib.removeSuffix "\n" (builtins.readFile ./VERSION);
       src = ./.;
 
       nativeBuildInputs = [
@@ -68,6 +68,7 @@
         export HOME=$(mktemp -d)
         mkdir -p $out/bin
         install -Dm644 kdl.lang $out/share/palobar/language-specs/kdl.lang
+        install -Dm644 VERSION $out/share/palobar/version
 
         ags bundle src/prefs.ts $out/bin/palobar-prefs
         ags bundle src/run-command.ts $out/bin/palobar-run-command
