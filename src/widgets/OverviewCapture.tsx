@@ -22,6 +22,7 @@ function destroyCaptureWindows() {
     win.destroy();
   }
   captureWindows = [];
+  scheduleGc();
 }
 
 function isTypingKey(keyval: number, state: number): string | null {
@@ -82,7 +83,7 @@ function trackInputRegion(win: Gtk.Window, widgets: Gtk.Widget[]) {
 
 function createCaptureWindow(monitor: Gdk.Monitor, index: number): Gtk.Window {
   const { TOP, BOTTOM, LEFT, RIGHT } = Astal.WindowAnchor;
-  const appsService = new AstalApps.Apps();
+  const appsService = getApps();
 
   const searchEntry = new Gtk.Entry({
     placeholder_text: "Type to search",
