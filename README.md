@@ -1,23 +1,39 @@
 palobar is a cheap clone of GNOME visual style for niri
 
-I am copying top bar
+I am copying top bar & quick settings. While in niri overview mode, typing triggers the launcher
 
 ![bar](screenshot/top-bar.png)
-
-and partly its components
-
-![panel](screenshot/right-panel.png)
-
-while in niri overview mode, typing triggers the launcher
-
 ![launcher](screenshot/launcher.png)
 
-and will gradually do some prefs
+And will gradually do some prefs
 
-![prefs](screenshot/prefs.png)
+<details>
+<summary>Settings</summary>
 
-It is typescript and depends on ags astal.
-The project is too young to describe installation which is likely a mess.
+Settings imitate gnome-control-center
+
+![prefs output](screenshot/prefs-10output.png)
+
+![prefs sound](screenshot/prefs-20sound.png)
+
+![prefs power](screenshot/prefs-30power.png)
+
+![prefs multitask](screenshot/prefs-40multitask.png)
+
+![prefs appearance](screenshot/prefs-50appearance.png)
+
+![prefs keyboard](screenshot/prefs-60keyboard.png)
+
+![prefs printers](screenshot/prefs-70printers.png)
+
+![prefs security](screenshot/prefs-80security.png)
+
+The goal is to achieve a cheap clone and be close visually. But it is not intended to reproduce full setups. For example printers is mostly a link to cups web if you activated it.
+
+</details>
+
+
+The code is typescript and depends on ags astal. Project is too young to describe installation which is only fine with nix atm.
 
 # Features
 
@@ -28,7 +44,17 @@ The project is too young to describe installation which is likely a mess.
     This includes running `palobar` since you do not need it to run.
 * `palobar-ctl quit` is mostly useful for me
 
-See [TODO](TODO.md) for things i may add.
+See [TODO](TODO.md).
+
+
+## Active settings
+
+palobar will apply settings from palobar-prefs which are stored in $CONFIG.json
+- favoriteApp for launcher dock
+- appearance = dark or light theme & accent color
+- wallpaper
+- lockscreen (picture, autoLock)
+- power settings (blanck, suspend)
 
 ## Niri overview
 
