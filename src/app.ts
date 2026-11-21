@@ -1,4 +1,5 @@
 import app from "ags/gtk4/app";
+import { Gdk, Gtk } from "ags/gtk4";
 import style from "./styles/main.scss";
 import { Bar } from "./widgets/Bar";
 import { CalendarPopup } from "./widgets/CalendarPopup";
@@ -15,7 +16,7 @@ import {
   initClipboardService,
   stopClipboardService,
 } from "./services/clipboard";
-import { configService } from "./services/config";
+import { getAccentColor, subscribeAppearance } from "./services/appearance";
 import { lockScreen } from "./services/lockscreen";
 
 app.start({
@@ -48,9 +49,16 @@ app.start({
     res(`unknown request: ${cmd ?? ""}`);
   },
   main() {
-    configService.subscribe((cfg) => {
-      const accent = cfg.appearance.accentColor || "#3584e4";
-      app.apply_css(`
+    const accentProvider = new Gtk.CssProvider();
+    // Astal installs the bundled stylesheet at USER priority.
+    Gtk.StyleContext.add_provider_for_display(
+      Gdk.Display.get_default()!,
+      accentProvider,
+      Gtk.STYLE_PROVIDER_PRIORITY_USER + 1,
+    );
+    subscribeAppearance("accent-color", () => {
+      const accent = getAccentColor().hex;
+      accentProvider.load_from_string(`
         .notif-badge,
         .qs-circle-btn.active,
         .qs-chevron-btn.active,

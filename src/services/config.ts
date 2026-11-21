@@ -2,14 +2,9 @@ import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 
 export type WallpaperMode = "fill" | "fit" | "stretch" | "center" | "tile";
-export type ColorScheme = "default" | "dark";
 
 export interface PalobarConfig {
   favoriteApps: string[];
-  appearance: {
-    colorScheme: ColorScheme;
-    accentColor: string;
-  };
   wallpaper: {
     path: string;
     mode: WallpaperMode;
@@ -30,10 +25,6 @@ export interface PalobarConfig {
 
 export const DEFAULT_CONFIG: PalobarConfig = {
   favoriteApps: [],
-  appearance: {
-    colorScheme: "default",
-    accentColor: "#3584e4",
-  },
   wallpaper: {
     path: "",
     mode: "fill",
@@ -63,10 +54,6 @@ function mergeConfig(raw: Partial<PalobarConfig>): PalobarConfig {
     favoriteApps: Array.isArray(raw.favoriteApps)
       ? [...new Set(raw.favoriteApps.filter((id) => typeof id === "string" && id.endsWith(".desktop")))]
       : [],
-    appearance: {
-      ...DEFAULT_CONFIG.appearance,
-      ...(raw.appearance ?? {}),
-    },
     wallpaper: {
       ...DEFAULT_CONFIG.wallpaper,
       ...(raw.wallpaper ?? {}),

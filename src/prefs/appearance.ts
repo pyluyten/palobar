@@ -1,26 +1,17 @@
 import { Gdk, Gtk } from "ags/gtk4";
 import Gio from "gi://Gio";
 import GLib from "gi://GLib";
-import { execAsync } from "ags/process";
-import type { ColorScheme, WallpaperMode } from "../services/config";
+import type { WallpaperMode } from "../services/config";
+import {
+  ACCENT_COLORS, canSetAppearance, getAccentColor, isDarkStyle,
+  setAccentColor, setDarkStyle, subscribeAppearance,
+} from "../services/appearance";
 import { makeGroupBox, makeRow, pickImage, type PrefsContext } from "./ui";
 
 const MODES: WallpaperMode[] = ["fill", "fit", "stretch", "center", "tile"];
 
-const ACCENT_COLORS = [
-  { name: "Blue", hex: "#3584e4" },
-  { name: "Teal", hex: "#2190a4" },
-  { name: "Green", hex: "#3a944a" },
-  { name: "Yellow", hex: "#c88800" },
-  { name: "Orange", hex: "#ed5b00" },
-  { name: "Red", hex: "#e62d42" },
-  { name: "Pink", hex: "#d56199" },
-  { name: "Purple", hex: "#9141ac" },
-  { name: "Slate", hex: "#6f8396" },
-];
-
 function createStyleCard(
-  scheme: ColorScheme,
+  scheme: "default" | "dark",
   title: string,
   onSelect: () => void,
 ): { button: Gtk.Button; setSelected: (selected: boolean) => void } {
@@ -87,7 +78,6 @@ function createStyleCard(
 export function buildAppearancePage(
   win: Gtk.Window,
   ctx: PrefsContext,
-  onAppearanceUpdated: () => void,
 ): Gtk.Widget {
   const cfg = ctx.getConfig();
 
@@ -117,33 +107,16 @@ export function buildAppearancePage(
   styleRow.set_halign(Gtk.Align.CENTER);
   styleRow.set_spacing(20);
 
-  let defaultCard!: ReturnType<typeof createStyleCard>;
-  let darkCard!: ReturnType<typeof createStyleCard>;
-
-  const applyScheme = (scheme: ColorScheme) => {
-    const current = ctx.getConfig();
-    ctx.updateConfig({
-      ...current,
-      appearance: { ...current.appearance, colorScheme: scheme },
-    });
-    defaultCard.setSelected(scheme === "default");
-    darkCard.setSelected(scheme === "dark");
-    execAsync([
-      "gsettings",
-      "set",
-      "org.gnome.desktop.interface",
-      "color-scheme",
-      scheme === "dark" ? "prefer-dark" : "default",
-    ]).catch(() => {});
-    onAppearanceUpdated();
-  };
-
-  defaultCard = createStyleCard("default", "Default", () =>
-    applyScheme("default"),
-  );
-  darkCard = createStyleCard("dark", "Dark", () => applyScheme("dark"));
-  defaultCard.setSelected(cfg.appearance.colorScheme === "default");
-  darkCard.setSelected(cfg.appearance.colorScheme === "dark");
+  const defaultCard = createStyleCard("default", "Default", () => setDarkStyle(false));
+  const darkCard = createStyleCard("dark", "Dark", () => setDarkStyle(true));
+  const styleWritable = canSetAppearance("color-scheme");
+  defaultCard.button.set_sensitive(styleWritable);
+  darkCard.button.set_sensitive(styleWritable);
+  const unsubscribeStyle = subscribeAppearance("color-scheme", () => {
+    const dark = isDarkStyle();
+    defaultCard.setSelected(!dark);
+    darkCard.setSelected(dark);
+  });
 
   styleRow.append(defaultCard.button);
   styleRow.append(darkCard.button);
@@ -179,21 +152,11 @@ export function buildAppearancePage(
     Gtk.STYLE_PROVIDER_PRIORITY_USER + 10,
   );
 
-  const accentButtons: Array<{ hex: string; btn: Gtk.Button }> = [];
-
-  const syncAccentSelection = (selectedHex: string) => {
-    for (const item of accentButtons) {
-      if (item.hex.toLowerCase() === selectedHex.toLowerCase()) {
-        item.btn.add_css_class("selected");
-      } else {
-        item.btn.remove_css_class("selected");
-      }
-    }
-  };
-
-  ACCENT_COLORS.forEach((c, idx) => {
+  const accentWritable = canSetAppearance("accent-color");
+  const accentButtons = ACCENT_COLORS.map((c, idx) => {
     const btn = new Gtk.Button({
       tooltip_text: c.name,
+      sensitive: accentWritable,
       width_request: 34,
       height_request: 34,
       halign: Gtk.Align.CENTER,
@@ -213,21 +176,24 @@ export function buildAppearancePage(
     dot.add_css_class(`accent-dot-${idx}`);
     btn.set_child(dot);
 
-    btn.connect("clicked", () => {
-      const current = ctx.getConfig();
-      ctx.updateConfig({
-        ...current,
-        appearance: { ...current.appearance, accentColor: c.hex },
-      });
-      syncAccentSelection(c.hex);
-      onAppearanceUpdated();
-    });
-
-    accentButtons.push({ hex: c.hex, btn });
+    btn.connect("clicked", () => setAccentColor(c.id));
     accentRow.append(btn);
+    return { id: c.id, btn };
   });
 
-  syncAccentSelection(cfg.appearance.accentColor);
+  const unsubscribeAccent = subscribeAppearance("accent-color", () => {
+    const selected = getAccentColor().id;
+    for (const { id, btn } of accentButtons) {
+      if (id === selected) btn.add_css_class("selected");
+      else btn.remove_css_class("selected");
+    }
+  });
+  win.connect("close-request", () => {
+    unsubscribeStyle();
+    unsubscribeAccent();
+    return false;
+  });
+
   accentGroup.append(accentRow);
   appearancePage.append(accentGroup);
 

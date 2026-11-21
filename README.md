@@ -1,16 +1,23 @@
 palobar is a cheap clone of GNOME visual style for niri
 
-I am copying top bar & quick settings. While in niri overview mode, typing triggers the launcher
+I am copying top bar & quick settings.
 
 ![bar](screenshot/top-bar.png)
-![launcher](screenshot/launcher.png)
 
-And will gradually do some prefs
+While in niri overview mode, typing triggers the launcher
+
+* a search entry appears
+* a dock appears, allows to click on app
+* if user types, apps appear.
+
+![launcher](screenshot/launcher.png)
 
 <details>
 <summary>Settings</summary>
 
 Settings imitate gnome-control-center
+The goal is to achieve a cheap clone and be close visually. But it is not intended to reproduce full setups. For example printers is mostly a link to cups web if you activated it.
+
 
 ![prefs output](screenshot/prefs-10output.png)
 
@@ -28,15 +35,23 @@ Settings imitate gnome-control-center
 
 ![prefs security](screenshot/prefs-80security.png)
 
-The goal is to achieve a cheap clone and be close visually. But it is not intended to reproduce full setups. For example printers is mostly a link to cups web if you activated it.
++ a json will write what is only used by palobar , 
+    + wallpaper setup,
+    + lockscreen setup,
+    + favourite apps (pinned to dock)
++ gsettings write what is shared by gtk
+    + color scheme
+    + accent color
++ no amendment to niri config. However niri allows to temporarilly adjust a monitor.
+  This is not written.
 
 </details>
 
+# Principles
 
-The code is typescript and depends on ags astal. Project is too young to describe installation which is only fine with nix atm.
+The code is typescript and depends on ags astal. I thought I would use gjs for a mockup but it seems to be a reasonnable choice and may stick to it. Project is too young to describe installation which is only fine with nix atm.
 
-# Features
-
+Components are:
 * `palobar` imitates gnome-panel + launcher
 * `palobar-ctl toggle-launcher` to activate launcher independantly from overwiew
 * `palobar-prefs` imitates gnome-control-center
@@ -45,24 +60,6 @@ The code is typescript and depends on ags astal. Project is too young to describ
 * `palobar-ctl quit` is mostly useful for me
 
 See [TODO](TODO.md).
-
-
-## Active settings
-
-palobar will apply settings from palobar-prefs which are stored in $CONFIG.json
-- favoriteApp for launcher dock
-- appearance = dark or light theme & accent color
-- wallpaper
-- lockscreen (picture, autoLock)
-- power settings (blanck, suspend)
-
-## Niri overview
-
-Like GNOME, when niri triggers overview
-
-* a search entry appears
-* a dock appears, allows to click on app
-* if user types, apps appear.
 
 
 # Notes

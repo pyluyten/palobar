@@ -51,6 +51,7 @@
         [
           pkgs.gjs
           pkgs.gtk4
+          pkgs.gsettings-desktop-schemas
           pkgs.gtk4-layer-shell
           pkgs.gtksourceview5
           pkgs.dart-sass

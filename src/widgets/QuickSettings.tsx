@@ -8,7 +8,7 @@ import AstalNetwork from "gi://AstalNetwork";
 import AstalNotifd from "gi://AstalNotifd";
 import { popups } from "../services/popups";
 import { lockScreen } from "../services/lockscreen";
-import { configService, saveConfig } from "../services/config";
+import { canSetAppearance, isDarkStyle, setDarkStyle, subscribeAppearance } from "../services/appearance";
 
 function runSessionCmd(cmd: string[]) {
   popups.close();
@@ -184,33 +184,15 @@ function QuickTogglesSection() {
   const [dnd, setDnd] = createState(notifd.dontDisturb);
   notifd.connect("notify::dont-disturb", () => setDnd(notifd.dontDisturb));
 
-  const [darkMode, setDarkMode] = createState(
-    configService.get().appearance.colorScheme === "dark",
-  );
-  configService.subscribe((cfg) => {
-    setDarkMode(cfg.appearance.colorScheme === "dark");
-  });
+  const [darkMode, setDarkMode] = createState(isDarkStyle());
+  subscribeAppearance("color-scheme", () => setDarkMode(isDarkStyle()));
 
   return (
     <box class="qs-mini-toggles" spacing={8} homogeneous>
       <button
         class={darkMode((dark) => dark ? "qs-mini-pill active" : "qs-mini-pill")}
-        onClicked={() => {
-          const current = configService.get();
-          const nextScheme =
-            current.appearance.colorScheme === "dark" ? "default" : "dark";
-          saveConfig({
-            ...current,
-            appearance: { ...current.appearance, colorScheme: nextScheme },
-          });
-          execAsync([
-            "gsettings",
-            "set",
-            "org.gnome.desktop.interface",
-            "color-scheme",
-            nextScheme === "dark" ? "prefer-dark" : "default",
-          ]).catch(() => {});
-        }}
+        sensitive={canSetAppearance("color-scheme")}
+        onClicked={() => setDarkStyle(!isDarkStyle())}
       >
         <box spacing={8} halign={Gtk.Align.START}>
           <image iconName="weather-clear-night-symbolic" />

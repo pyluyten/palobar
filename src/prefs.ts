@@ -2,6 +2,7 @@ import app from "ags/gtk4/app";
 import { Gdk, Gtk } from "ags/gtk4";
 import { execAsync } from "ags/process";
 import GLib from "gi://GLib";
+import { getAccentColor, isDarkStyle, subscribeAppearance } from "./services/appearance";
 import {
   CONFIG_PATH,
   loadConfig,
@@ -53,18 +54,18 @@ function buildPrefsWindow() {
     Gtk.STYLE_PROVIDER_PRIORITY_USER + 10,
   );
 
-  const syncAppearance = () => {
-    const current = ctx.getConfig();
-    if (current.appearance.colorScheme === "dark") {
+  const unsubscribeStyle = subscribeAppearance("color-scheme", () => {
+    if (isDarkStyle()) {
       win.add_css_class("dark");
     } else {
       win.remove_css_class("dark");
     }
+  });
+  const unsubscribeAccent = subscribeAppearance("accent-color", () => {
     accentProvider.load_from_string(`
-      .prefs-style-card.selected { border-color: ${current.appearance.accentColor}; }
+      .prefs-style-card.selected { border-color: ${getAccentColor().hex}; }
     `);
-  };
-  syncAppearance();
+  });
 
   const stack = new Gtk.Stack({
     transition_type: Gtk.StackTransitionType.CROSSFADE,
@@ -77,7 +78,7 @@ function buildPrefsWindow() {
   stack.add_named(buildSoundPage(), "sound");
   stack.add_named(buildPowerPage(ctx), "power");
   stack.add_named(buildNiriPage(win), "niri");
-  stack.add_named(buildAppearancePage(win, ctx, syncAppearance), "appearance");
+  stack.add_named(buildAppearancePage(win, ctx), "appearance");
   stack.add_named(buildKeyboardPage(win), "keyboard");
   stack.add_named(buildPrintersPage(), "printers");
   stack.add_named(buildSecurityPage(win, ctx), "security");
@@ -242,6 +243,8 @@ function buildPrefsWindow() {
 
   win.set_child(root);
   win.connect("close-request", () => {
+    unsubscribeStyle();
+    unsubscribeAccent();
     app.quit();
     return false;
   });
