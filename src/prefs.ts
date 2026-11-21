@@ -42,6 +42,7 @@ function buildPrefsWindow() {
 
   const win = new Gtk.Window({
     title: "Palobar Settings",
+    icon_name: "io.Astal.palobar-prefs",
     default_width: 740,
     default_height: 540,
   });

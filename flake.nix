@@ -74,6 +74,17 @@
         ags bundle src/run-command.ts $out/bin/palobar-run-command
         ags bundle src/app.ts $out/bin/.palobar-bin
 
+        install -Dm644 assets/palobar-prefs.png $out/share/icons/hicolor/128x128/apps/io.Astal.palobar-prefs.png
+        mkdir -p $out/share/applications
+        cat > $out/share/applications/io.Astal.palobar-prefs.desktop <<EOF
+        [Desktop Entry]
+        Type=Application
+        Name=Palobar Settings
+        Exec=$out/bin/palobar-prefs
+        Icon=io.Astal.palobar-prefs
+        NoDisplay=true
+        EOF
+
         wrapProgram $out/bin/palobar-prefs \
           --set PALOBAR_GTKSOURCE_LANGUAGE_DIR $out/share/palobar/language-specs \
           --prefix PATH : $out/bin \
