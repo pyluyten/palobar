@@ -28,26 +28,35 @@ ____
 
 | gnome-settings | palobar |
 | - | - |
-| wifi | todo. |
-| network | todo. |
-| bluetooth | todo. |
+| wifi | todo. but quicksettings already provide 99%. |
+| network | todo. but minor |
+| bluetooth | **todo** |
 | screens | *Done* for v1. |
-| sound | todo. IMPORTANT. |
+| sound | *Done*. |
 | energy | todo |
-| multi task | BELONGS TO NIRI. |
-| appearance | todo |
-| notifi | todo |
-| research | todo |
-| accounts | todo |
+| multi task | Done, in a sense... |
+| appearance | Done |
+| notification | todo |
+| research | could it be? |
+| accounts | todo , or not|
 | share | todo |
 | wellbeing | todo |
 | mouse | todo |
-| keyb | todo |
-| colors | todo |
+| keyb | todo: add fcitx |
+| colors | todo ?|
 | printers | *DONE* |
 | accessibilty | todo |
-| private | todo |
-| system | todo |
+| private -lock | done |
+| private -gps | done |
+| private -history | done |
+| private -camera | done |
+| private -security | done |
+| system-locale | todo |
+| system-datetime | todo |
+| system-datetime | todo |
+| system-users | todo |
+| system-ssh | todo |
+| system-about | todo |
 
 
 ## Meta
