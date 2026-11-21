@@ -56,7 +56,6 @@
           pkgs.gtksourceview5
           pkgs.dart-sass
           pkgs.swaybg
-          pkgs.swaylock
           pkgs.swayidle
           pkgs.wl-clipboard
           pkgs.cliphist
@@ -95,11 +94,11 @@
         wrapProgram $out/bin/palobar-prefs \
           --set PALOBAR_GTKSOURCE_LANGUAGE_DIR $out/share/palobar/language-specs \
           --prefix PATH : $out/bin \
-          --prefix PATH : ${pkgs.lib.makeBinPath [pkgs.bash pkgs.swaylock]}
+          --prefix PATH : ${pkgs.lib.makeBinPath [pkgs.bash]}
 
         wrapProgram $out/bin/.palobar-bin \
           --prefix PATH : $out/bin \
-          --prefix PATH : ${pkgs.lib.makeBinPath [pkgs.swaybg pkgs.swaylock pkgs.swayidle pkgs.wl-clipboard pkgs.cliphist pkgs.networkmanager]}
+          --prefix PATH : ${pkgs.lib.makeBinPath [pkgs.swaybg pkgs.swayidle pkgs.wl-clipboard pkgs.cliphist pkgs.networkmanager]}
 
         cat > $out/bin/palobar-ctl <<EOF
         #!${pkgs.runtimeShell}
@@ -148,7 +147,6 @@
         pkgs.gtksourceview5
         pkgs.dart-sass
         pkgs.swaybg
-        pkgs.swaylock
         pkgs.swayidle
         pkgs.wl-clipboard
         pkgs.cliphist

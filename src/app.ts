@@ -34,8 +34,7 @@ app.start({
       return;
     }
     if (cmd === "lock") {
-      lockScreen();
-      res("ok");
+      void lockScreen().then((error) => res(error ?? "ok"));
       return;
     }
     if (cmd === "quit") {

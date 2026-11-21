@@ -63,8 +63,10 @@ function buildPrefsWindow() {
     }
   });
   const unsubscribeAccent = subscribeAppearance("accent-color", () => {
+    const accent = getAccentColor().hex;
     accentProvider.load_from_string(`
-      .prefs-style-card.selected { border-color: ${getAccentColor().hex}; }
+      .prefs-style-card.selected { border-color: ${accent}; }
+      .prefs-lock-unavailable { color: ${accent}; font-weight: bold; }
     `);
   });
 

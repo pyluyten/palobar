@@ -301,7 +301,9 @@ export function QuickSettings(gdkmonitor: Gdk.Monitor) {
             tooltipText="Lock Screen"
             onClicked={() => {
               popups.close();
-              lockScreen();
+              void lockScreen().then((error) => {
+                if (error) console.warn("[lockscreen]", error);
+              });
             }}
           >
             <image iconName="system-lock-screen-symbolic" />

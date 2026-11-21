@@ -3,6 +3,7 @@ import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 import { execAsync } from "ags/process";
 import { DEFAULT_CONFIG, saveConfig } from "../services/config";
+import { checkLockSupport } from "../services/lock-support";
 import { makeGroupBox, makeRow, pickImage, type PrefsContext } from "./ui";
 
 const LOCK_DELAYS = [
@@ -34,7 +35,27 @@ export function buildSecurityPage(
   lockGroupTitle.add_css_class("prefs-group-title");
   securityPage.append(lockGroupTitle);
 
+  const availability = new Gtk.Label({
+    label: "Checking lock screen availability…",
+    halign: Gtk.Align.START,
+    wrap: true,
+    xalign: 0,
+  });
+  availability.add_css_class("prefs-muted");
+  securityPage.append(availability);
+
   const lockGroup = makeGroupBox();
+  lockGroup.set_sensitive(false);
+  securityPage.connect("map", () => {
+    void checkLockSupport().then((support) => {
+      lockGroup.set_sensitive(support.available);
+      availability.set_visible(!support.available);
+      if (!support.available) {
+        availability.set_label(support.reason);
+        availability.add_css_class("prefs-lock-unavailable");
+      }
+    });
+  });
 
   const previewRow = makeRow(false);
   previewRow.halign = Gtk.Align.CENTER;
@@ -213,16 +234,14 @@ export function buildSecurityPage(
   testLockBtn.connect("clicked", () => {
     const current = ctx.getConfig();
     saveConfig(current);
-    execAsync(["palobar-ctl", "lock"]).catch(() => {
-      const fallbackColor =
-        current.lockscreen.color.replace("#", "") || "131316";
-      const args = ["swaylock", "-c", fallbackColor];
-      const img = current.lockscreen.image || current.wallpaper.path;
-      if (img && GLib.file_test(img, GLib.FileTest.EXISTS)) {
-        args.push("-i", img, "-s", "fill");
-      }
-      execAsync(args).catch((err) => console.error(err));
-    });
+    const showError = (detail: string) => new Gtk.AlertDialog({
+      message: "Could not lock the screen",
+      detail,
+    }).show(win);
+    execAsync(["palobar-ctl", "lock"]).then((response) => {
+      const detail = response.trim();
+      if (detail !== "ok") showError(detail || "Palobar did not confirm the lock request.");
+    }, (error) => showError(String(error)));
   });
   testLockRow.append(testLockInfo);
   testLockRow.append(testLockBtn);

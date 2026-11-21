@@ -3,7 +3,6 @@
 // Dépendances système :
 //   - gtk4-session-lock  (typelib Gtk4SessionLock) -> protocole ext-session-lock-v1
 //   - astal-auth         (typelib AstalAuth)       -> authentification PAM
-//   - swaylock (optionnel)                         -> repli si ext-session-lock indisponible
 //
 // Deux étapes, comme GNOME :
 //   "clock"  : fond net, grosse horloge + date
@@ -23,11 +22,12 @@ import { createState, createRoot } from "ags"
 import { createPoll } from "ags/time"
 import GLib from "gi://GLib"
 import Gio from "gi://Gio"
-import Auth from "gi://AstalAuth"
+import type Auth from "gi://AstalAuth"
 import System from "system"
 import type SessionLock from "gi://Gtk4SessionLock"
 
 import { lockCss } from "./lock-style"
+import { checkLockSupport } from "./lock-support"
 import { DEFAULT_CONFIG, loadConfig, type PalobarConfig } from "./config"
 
 // ---------------------------------------------------------------- config ---
@@ -57,6 +57,7 @@ const date = createPoll("", 30_000, () => {
 })
 
 let lock: SessionLock.Instance | null = null
+let lockAuth: typeof Auth | null = null
 let monitorsChangedId: number | null = null
 let bgTexture: Gdk.Texture | null = null // partagée entre tous les écrans
 const windows = new Map<Gdk.Monitor, LockWin>()
@@ -73,14 +74,15 @@ stage.subscribe(() => {
 // ------------------------------------------------------------------ auth ---
 
 function tryUnlock(password: string, entry: Gtk.PasswordEntry) {
-    if (busy.get() || password.length === 0) return
+    const auth = lockAuth
+    if (!auth || busy.get() || password.length === 0) return
     setBusy(true)
     setError("")
 
     // Utilise le service PAM "astal-auth" (cf. /etc/pam.d/astal-auth)
-    Auth.Pam.authenticate(password, (_, task) => {
+    auth.Pam.authenticate(password, (_, task) => {
         try {
-            Auth.Pam.authenticate_finish(task)
+            auth.Pam.authenticate_finish(task)
             unlock()
         } catch (_e) {
             setError("Incorrect password")
@@ -259,7 +261,6 @@ function syncWindows() {
 let css_applied = false
 
 let lockStarting = false
-let swaylockProcess: Gio.Subprocess | null = null
 
 function fallbackColor(cfg: PalobarConfig): Gdk.RGBA {
     const color = new Gdk.RGBA()
@@ -267,44 +268,19 @@ function fallbackColor(cfg: PalobarConfig): Gdk.RGBA {
     return color
 }
 
-function startSwaylock() {
-    const cfg = loadConfig()
-    const { red, green, blue } = fallbackColor(cfg)
-    const color = [red, green, blue]
-        .map((value) => Math.round(value * 255).toString(16).padStart(2, "0"))
-        .join("")
-    const args = ["swaylock", "-c", color]
-    const image = cfg.lockscreen.image || cfg.wallpaper.path
-    if (image && GLib.file_test(image, GLib.FileTest.IS_REGULAR)) {
-        args.push("-i", image, "-s", "fill")
-    }
-
-    const process = Gio.Subprocess.new(args, Gio.SubprocessFlags.NONE)
-    swaylockProcess = process
-    process.wait_check_async(null, (_process, result) => {
-        try {
-            process.wait_check_finish(result)
-        } catch (err) {
-            console.error("[lockscreen] swaylock failed:", err)
-        } finally {
-            swaylockProcess = null
-        }
-    })
-}
-
-export async function lockScreen() {
-    if (lock || lockStarting || swaylockProcess) return
+export async function lockScreen(): Promise<string | null> {
+    if (lock || lockStarting) return null
 
     lockStarting = true
     try {
-        const native = await import("gi://Gtk4SessionLock").catch(() => null)
-        if (native?.default.is_supported()) {
-            startNativeLock(native.default)
-        } else {
-            startSwaylock()
-        }
+        const support = await checkLockSupport()
+        if (!support.available) return support.reason
+        lockAuth = support.auth
+        startNativeLock(support.sessionLock)
+        return null
     } catch (err) {
         console.error("[lockscreen] failed to start:", err)
+        return "Could not start the lock screen."
     } finally {
         lockStarting = false
     }
@@ -375,6 +351,7 @@ function cleanup() {
     focusers.clear()
     bgTexture = null
     lock = null
+    lockAuth = null
     setStage("clock")
     gcSoon()
 }
