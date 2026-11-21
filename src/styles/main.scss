@@ -478,7 +478,8 @@ window.launcher-window {
   background-color: rgba(255, 255, 255, 0.09);
   color: #fff;
 
-  &:hover {
+  &:hover,
+  &:checked {
     background-color: rgba(255, 255, 255, 0.18);
   }
 }

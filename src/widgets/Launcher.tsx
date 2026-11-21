@@ -47,9 +47,9 @@ export function isLauncherOpen(): boolean {
   return launcherWindow !== null;
 }
 
-export function openLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
+export function openLauncherFromOverview(monitor: Gdk.Monitor, initialQuery?: string) {
   if (launcherWindow) return;
-  toggleLauncher(monitor, initialQuery);
+  showLauncher(monitor, initialQuery, true);
 }
 
 export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
@@ -57,7 +57,14 @@ export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
     closeLauncher();
     return;
   }
+  showLauncher(monitor, initialQuery, false);
+}
 
+function showLauncher(
+  monitor: Gdk.Monitor | undefined,
+  initialQuery: string | undefined,
+  fromOverview: boolean,
+) {
   popups.close();
 
   const targetMonitor = monitor ?? app.get_monitors()[0];
@@ -328,8 +335,11 @@ export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
   // --- Mini Dock (deduplicated open apps from niri) ---
   const dock = createMiniDock({
     appsService,
-    onActivateApp: () => closeLauncher(),
+    onActivateApp: closeLauncher,
     acceptFavorites: true,
+    applicationsToggle: fromOverview
+      ? { active: true, onToggle: closeLauncher }
+      : undefined,
   });
 
   // --- Main Container ---

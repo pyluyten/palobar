@@ -11,7 +11,7 @@ import {
   closeLauncher,
   isLauncherOpen,
   onLauncherStateChange,
-  openLauncher,
+  openLauncherFromOverview,
 } from "./Launcher";
 
 let captureDisposers: (() => void)[] = [];
@@ -95,13 +95,18 @@ function createCaptureWindow(monitor: Gdk.Monitor, index: number) {
   });
   searchEntry.add_css_class("launcher-search");
 
+  const showApplications = (query?: string) => {
+    destroyCaptureWindows();
+    openedFromOverview = true;
+    openLauncherFromOverview(monitor, query);
+  };
+
   const dock = createMiniDock({
     appsService,
     onActivateApp: () => destroyCaptureWindows(),
-    onShowApps: () => {
-      destroyCaptureWindows();
-      openedFromOverview = true;
-      openLauncher(monitor);
+    applicationsToggle: {
+      active: false,
+      onToggle: () => showApplications(),
     },
   });
 
@@ -162,9 +167,7 @@ function createCaptureWindow(monitor: Gdk.Monitor, index: number) {
 
     const ch = isTypingKey(keyval, state);
     if (ch) {
-      destroyCaptureWindows();
-      openedFromOverview = true;
-      openLauncher(monitor, ch);
+      showApplications(ch);
       return true;
     }
 

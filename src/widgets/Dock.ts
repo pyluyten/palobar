@@ -58,7 +58,7 @@ export interface MiniDockOptions {
   appsService: AstalApps.Apps;
   onActivateApp: () => void;
   acceptFavorites?: boolean;
-  onShowApps?: () => void;
+  applicationsToggle?: { active: boolean; onToggle: () => void };
 }
 
 export function createMiniDock(opts: MiniDockOptions) {
@@ -231,10 +231,18 @@ export function createMiniDock(opts: MiniDockOptions) {
       appendApp(name, iconName, true, () => niri.focusWindow(window.id), desktop);
     }
 
-    if (opts.onShowApps) {
-      const showApps = opts.onShowApps;
-      const button = new Gtk.Button({
-        tooltip_text: "Show Applications",
+    if (opts.acceptFavorites && !dockBox.get_first_child()) {
+      dockBox.append(new Gtk.Label({
+        label: "Drop an app here to add it to favorites",
+        height_request: 56,
+      }));
+    }
+
+    if (opts.applicationsToggle) {
+      const { active, onToggle } = opts.applicationsToggle;
+      const button = new Gtk.ToggleButton({
+        active,
+        tooltip_text: active ? "Hide Applications" : "Show Applications",
         child: new Gtk.Image({
           icon_name: "view-app-grid-symbolic",
           pixel_size: 32,
@@ -242,16 +250,9 @@ export function createMiniDock(opts: MiniDockOptions) {
       });
       button.add_css_class("launcher-dock-item");
       button.add_css_class("launcher-show-apps");
-      const clickedId = button.connect("clicked", showApps);
+      const clickedId = button.connect("clicked", onToggle);
       itemSignals.push(() => button.disconnect(clickedId));
       dockBox.append(button);
-    }
-
-    if (opts.acceptFavorites && !dockBox.get_first_child()) {
-      dockBox.append(new Gtk.Label({
-        label: "Drop an app here to add it to favorites",
-        height_request: 56,
-      }));
     }
   };
 
