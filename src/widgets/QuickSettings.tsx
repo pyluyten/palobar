@@ -9,6 +9,7 @@ import AstalNotifd from "gi://AstalNotifd";
 import { popups } from "../services/popups";
 import { lockScreen } from "../services/lockscreen";
 import { canSetAppearance, isDarkStyle, setDarkStyle, subscribeAppearance } from "../services/appearance";
+import { PopupDismissArea } from "./PopupDismissArea";
 
 function runSessionCmd(cmd: string[]) {
   popups.close();
@@ -218,7 +219,7 @@ function QuickTogglesSection() {
 }
 
 export function QuickSettings(gdkmonitor: Gdk.Monitor) {
-  const { TOP, RIGHT } = Astal.WindowAnchor;
+  const { TOP, BOTTOM, LEFT, RIGHT } = Astal.WindowAnchor;
   const [showPowerMenu, setShowPowerMenu] = createState(false);
 
   return (
@@ -226,9 +227,8 @@ export function QuickSettings(gdkmonitor: Gdk.Monitor) {
       name="quick-settings-popup"
       class="popup-window"
       gdkmonitor={gdkmonitor}
-      anchor={TOP | RIGHT}
-      marginTop={6}
-      marginRight={10}
+      anchor={TOP | BOTTOM | LEFT | RIGHT}
+      exclusivity={Astal.Exclusivity.NORMAL}
       keymode={Astal.Keymode.ON_DEMAND}
       visible={popups.active((p) => p === "quick-settings")}
       application={app}
@@ -244,127 +244,133 @@ export function QuickSettings(gdkmonitor: Gdk.Monitor) {
         self.add_controller(keyCtrl);
       }}
     >
-      <box
-        class="popup-card qs-card"
-        orientation={Gtk.Orientation.VERTICAL}
-        spacing={14}
-      >
-        {/* Header: Screenshot & Settings on left, Lock & Power on right */}
-        <box class="qs-header" spacing={8}>
-          <button
-            class="qs-circle-btn"
-            tooltipText="Screenshot"
-            onClicked={() => {
-              popups.close();
-              GLib.timeout_add(GLib.PRIORITY_DEFAULT, 150, () => {
-                execAsync(["niri", "msg", "action", "screenshot"]).catch(
-                  (err) => console.error("[screenshot] failed:", err),
-                );
-                return GLib.SOURCE_REMOVE;
-              });
-            }}
-          >
-            <image iconName="applets-screenshooter-symbolic" />
-          </button>
+      <PopupDismissArea>
+        <box
+          class="popup-card qs-card"
+          halign={Gtk.Align.END}
+          valign={Gtk.Align.START}
+          marginTop={6}
+          marginEnd={10}
+          orientation={Gtk.Orientation.VERTICAL}
+          spacing={14}
+        >
+          {/* Header: Screenshot & Settings on left, Lock & Power on right */}
+          <box class="qs-header" spacing={8}>
+            <button
+              class="qs-circle-btn"
+              tooltipText="Screenshot"
+              onClicked={() => {
+                popups.close();
+                GLib.timeout_add(GLib.PRIORITY_DEFAULT, 150, () => {
+                  execAsync(["niri", "msg", "action", "screenshot"]).catch(
+                    (err) => console.error("[screenshot] failed:", err),
+                  );
+                  return GLib.SOURCE_REMOVE;
+                });
+              }}
+            >
+              <image iconName="applets-screenshooter-symbolic" />
+            </button>
 
-          <button
-            class="qs-circle-btn"
-            tooltipText="Preferences"
-            onClicked={() => {
-              popups.close();
-              const bundledPrefs = GLib.find_program_in_path("palobar-prefs");
-              if (bundledPrefs) {
-                execAsync([bundledPrefs]).catch((err) =>
+            <button
+              class="qs-circle-btn"
+              tooltipText="Preferences"
+              onClicked={() => {
+                popups.close();
+                const bundledPrefs = GLib.find_program_in_path("palobar-prefs");
+                if (bundledPrefs) {
+                  execAsync([bundledPrefs]).catch((err) =>
+                    console.error("[prefs] failed to launch:", err),
+                  );
+                  return;
+                }
+                const prefsPath = GLib.file_test("prefs.ts", GLib.FileTest.EXISTS)
+                  ? "prefs.ts"
+                  : "src/prefs.ts";
+                execAsync(["ags", "run", prefsPath]).catch((err) =>
                   console.error("[prefs] failed to launch:", err),
                 );
-                return;
-              }
-              const prefsPath = GLib.file_test("prefs.ts", GLib.FileTest.EXISTS)
-                ? "prefs.ts"
-                : "src/prefs.ts";
-              execAsync(["ags", "run", prefsPath]).catch((err) =>
-                console.error("[prefs] failed to launch:", err),
-              );
-            }}
-          >
-            <image iconName="preferences-system-symbolic" />
-          </button>
+              }}
+            >
+              <image iconName="preferences-system-symbolic" />
+            </button>
 
-          <box hexpand />
+            <box hexpand />
 
-          <button
-            class="qs-circle-btn"
-            tooltipText="Lock Screen"
-            onClicked={() => {
-              popups.close();
-              void lockScreen().then((error) => {
-                if (error) console.warn("[lockscreen]", error);
-              });
-            }}
-          >
-            <image iconName="system-lock-screen-symbolic" />
-          </button>
+            <button
+              class="qs-circle-btn"
+              tooltipText="Lock Screen"
+              onClicked={() => {
+                popups.close();
+                void lockScreen().then((error) => {
+                  if (error) console.warn("[lockscreen]", error);
+                });
+              }}
+            >
+              <image iconName="system-lock-screen-symbolic" />
+            </button>
 
-          <button
-            class={`qs-circle-btn ${showPowerMenu((s) => (s ? "active" : ""))}`}
-            tooltipText="Power Options"
-            onClicked={() => setShowPowerMenu((s) => !s)}
-          >
-            <image iconName="system-shutdown-symbolic" />
-          </button>
-        </box>
-
-        {/* Expandable Power Menu */}
-        <box
-          class="qs-submenu qs-power-menu"
-          orientation={Gtk.Orientation.VERTICAL}
-          spacing={4}
-          visible={showPowerMenu}
-        >
-          <button
-            class="qs-power-item"
-            onClicked={() =>
-              runSessionCmd(["niri", "msg", "action", "quit", "--skip-confirmation"])
-            }
-          >
-            <box spacing={10}>
-              <image iconName="system-log-out-symbolic" />
-              <label label="Log Out" />
-            </box>
-          </button>
-          <button
-            class="qs-power-item"
-            onClicked={() => runSessionCmd(["systemctl", "suspend"])}
-          >
-            <box spacing={10}>
-              <image iconName="media-playback-pause-symbolic" />
-              <label label="Suspend" />
-            </box>
-          </button>
-          <button
-            class="qs-power-item"
-            onClicked={() => runSessionCmd(["systemctl", "reboot"])}
-          >
-            <box spacing={10}>
-              <image iconName="system-reboot-symbolic" />
-              <label label="Restart" />
-            </box>
-          </button>
-          <button
-            class="qs-power-item danger"
-            onClicked={() => runSessionCmd(["systemctl", "poweroff"])}
-          >
-            <box spacing={10}>
+            <button
+              class={`qs-circle-btn ${showPowerMenu((s) => (s ? "active" : ""))}`}
+              tooltipText="Power Options"
+              onClicked={() => setShowPowerMenu((s) => !s)}
+            >
               <image iconName="system-shutdown-symbolic" />
-              <label label="Power Off" />
-            </box>
-          </button>
-        </box>
+            </button>
+          </box>
 
-        <VolumeSection />
-        <NetworkSection />
-        <QuickTogglesSection />
-      </box>
+          {/* Expandable Power Menu */}
+          <box
+            class="qs-submenu qs-power-menu"
+            orientation={Gtk.Orientation.VERTICAL}
+            spacing={4}
+            visible={showPowerMenu}
+          >
+            <button
+              class="qs-power-item"
+              onClicked={() =>
+                runSessionCmd(["niri", "msg", "action", "quit", "--skip-confirmation"])
+              }
+            >
+              <box spacing={10}>
+                <image iconName="system-log-out-symbolic" />
+                <label label="Log Out" />
+              </box>
+            </button>
+            <button
+              class="qs-power-item"
+              onClicked={() => runSessionCmd(["systemctl", "suspend"])}
+            >
+              <box spacing={10}>
+                <image iconName="media-playback-pause-symbolic" />
+                <label label="Suspend" />
+              </box>
+            </button>
+            <button
+              class="qs-power-item"
+              onClicked={() => runSessionCmd(["systemctl", "reboot"])}
+            >
+              <box spacing={10}>
+                <image iconName="system-reboot-symbolic" />
+                <label label="Restart" />
+              </box>
+            </button>
+            <button
+              class="qs-power-item danger"
+              onClicked={() => runSessionCmd(["systemctl", "poweroff"])}
+            >
+              <box spacing={10}>
+                <image iconName="system-shutdown-symbolic" />
+                <label label="Power Off" />
+              </box>
+            </button>
+          </box>
+
+          <VolumeSection />
+          <NetworkSection />
+          <QuickTogglesSection />
+        </box>
+      </PopupDismissArea>
     </window>
   );
 }
