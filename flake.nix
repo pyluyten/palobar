@@ -106,7 +106,7 @@
         #!${pkgs.runtimeShell}
         case "\''${1:-}" in
           "")
-            printf '%s\n' 'Usage: palobar-ctl {quit|toggle-launcher|version}'
+            printf '%s\n' 'Usage: palobar-ctl {quit|toggle-launcher|displayWorkspaces|version}'
             exit 0
             ;;
           version)

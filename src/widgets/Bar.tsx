@@ -7,6 +7,7 @@ import AstalNetwork from "gi://AstalNetwork";
 import { niri, type NiriWorkspace } from "../services/niri";
 import { popups } from "../services/popups";
 import { unreadNotificationCount } from "../services/unread-notifications";
+import { displayWorkspaces } from "./WorkspaceDialog";
 import { SysTray } from "./Tray";
 
 function formatGnomeDate(): string {
@@ -24,7 +25,7 @@ function formatGnomeDate(): string {
   return `${datePart.replace(",", "")}  ${timePart}`;
 }
 
-function Workspaces() {
+function WorkspaceSwitcher({ monitor }: { monitor: Gdk.Monitor }) {
   const [workspaces, setWorkspaces] = createState<NiriWorkspace[]>(
     niri.getWorkspaces(),
   );
@@ -32,7 +33,20 @@ function Workspaces() {
   niri.subscribe((list) => setWorkspaces(list));
 
   return (
-    <box class="workspaces" spacing={2} valign={Gtk.Align.CENTER}>
+    <box
+      class="workspaces"
+      spacing={2}
+      valign={Gtk.Align.CENTER}
+      $={(self) => {
+        const click = new Gtk.GestureClick({ button: Gdk.BUTTON_SECONDARY });
+        click.set_propagation_phase(Gtk.PropagationPhase.CAPTURE);
+        click.connect("pressed", (gesture) => {
+          gesture.set_state(Gtk.EventSequenceState.CLAIMED);
+          displayWorkspaces(monitor);
+        });
+        self.add_controller(click);
+      }}
+    >
       <For each={workspaces}>
         {(ws) => (
           <button
@@ -125,7 +139,7 @@ export function Bar(gdkmonitor: Gdk.Monitor, index: number) {
       <centerbox class="panel">
         {/* Left: Workspaces */}
         <box $type="start" class="panel-left" spacing={8}>
-          <Workspaces />
+          <WorkspaceSwitcher monitor={gdkmonitor} />
         </box>
 
         {/* Center: Date & Time */}

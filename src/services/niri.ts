@@ -2,12 +2,17 @@ import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 import { execAsync } from "ags/process";
 
+Gio._promisify(Gio.SocketClient.prototype, "connect_async");
+Gio._promisify(Gio.OutputStream.prototype, "write_all_async");
+Gio._promisify(Gio.DataInputStream.prototype, "read_line_async");
+
 export interface NiriWindow {
   id: number;
   title: string | null;
   app_id: string | null;
   workspace_id: number | null;
   is_focused: boolean;
+  layout?: { pos_in_scrolling_layout?: [number, number] | null };
 }
 
 export interface NiriWorkspace {
@@ -27,6 +32,7 @@ class NiriService {
   private workspaces: NiriWorkspace[] = [];
   private overviewOpen = false;
   private listeners = new Set<Listener>();
+  private windowClosedListeners = new Set<(id: number) => void>();
   private overviewListeners = new Set<OverviewListener>();
   private running = false;
 
@@ -63,6 +69,11 @@ class NiriService {
     };
   }
 
+  subscribeWindowClosed(listener: (id: number) => void): () => void {
+    this.windowClosedListeners.add(listener);
+    return () => this.windowClosedListeners.delete(listener);
+  }
+
   private emit() {
     for (const listener of this.listeners) {
       listener(this.workspaces);
@@ -79,11 +90,57 @@ class NiriService {
     return [...list].sort((a, b) => a.idx - b.idx);
   }
 
+  async queryWorkspaces(): Promise<NiriWorkspace[]> {
+    const out = await execAsync(["niri", "msg", "--json", "workspaces"]);
+    return this.sortWorkspaces(JSON.parse(out) as NiriWorkspace[]);
+  }
+
+  async queryWindows(): Promise<NiriWindow[]> {
+    const out = await execAsync(["niri", "msg", "--json", "windows"]);
+    return JSON.parse(out) as NiriWindow[];
+  }
+
+  async closeWindow(id: number) {
+    await execAsync(["niri", "msg", "action", "close-window", "--id", String(id)]);
+  }
+
+  async moveWindowToWorkspace(windowId: number, workspaceId: number) {
+    await this.requestAction({
+      MoveWindowToWorkspace: { window_id: windowId, reference: { Id: workspaceId }, focus: false },
+    });
+  }
+
+  async renameWorkspace(id: number, name: string) {
+    await this.requestAction({ SetWorkspaceName: { name, workspace: { Id: id } } });
+  }
+
+  private async requestAction(action: Record<string, object>) {
+    const path = GLib.getenv("NIRI_SOCKET");
+    if (!path) throw new Error("NIRI_SOCKET is unavailable");
+
+    // The CLI parses workspace references as indices or names. IPC also accepts stable IDs.
+    const request = { Action: action };
+    const client = new Gio.SocketClient({ timeout: 3 });
+    const connection = await client.connect_async(new Gio.UnixSocketAddress({ path }), null);
+    try {
+      const bytes = new TextEncoder().encode(JSON.stringify(request) + "\n");
+      await connection.output_stream.write_all_async(bytes, GLib.PRIORITY_DEFAULT, null);
+      const input = new Gio.DataInputStream({
+        base_stream: connection.input_stream,
+        close_base_stream: false,
+      });
+      const [line] = await input.read_line_async(GLib.PRIORITY_DEFAULT, null);
+      if (!line) throw new Error("Niri closed the connection without replying");
+      const reply = JSON.parse(new TextDecoder().decode(line));
+      if (!("Ok" in reply)) throw new Error(reply.Err ?? "Niri rejected the action");
+    } finally {
+      connection.close(null);
+    }
+  }
+
   async refreshWorkspaces() {
     try {
-      const out = await execAsync(["niri", "msg", "-j", "workspaces"]);
-      const parsed = JSON.parse(out) as NiriWorkspace[];
-      this.workspaces = this.sortWorkspaces(parsed);
+      this.workspaces = await this.queryWorkspaces();
       this.emit();
     } catch (err) {
       console.error("[niri] failed to fetch workspaces:", err);
@@ -115,8 +172,7 @@ class NiriService {
 
   async getWindows(): Promise<NiriWindow[]> {
     try {
-      const out = await execAsync(["niri", "msg", "-j", "windows"]);
-      return JSON.parse(out) as NiriWindow[];
+      return await this.queryWindows();
     } catch (err) {
       console.error("[niri] failed to fetch windows:", err);
       return [];
@@ -189,6 +245,9 @@ class NiriService {
           is_focused: payload.focused ? ws.id === payload.id : ws.is_focused,
         }));
         this.emit();
+      } else if ("WindowClosed" in event) {
+        const { id } = event.WindowClosed as { id: number };
+        for (const listener of this.windowClosedListeners) listener(id);
       } else if ("OverviewOpenedOrClosed" in event) {
         const payload = event.OverviewOpenedOrClosed as {
           is_open: boolean;

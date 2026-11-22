@@ -576,3 +576,67 @@ window.launcher-window {
   color: $muted-fg;
   font-size: 12px;
 }
+
+.workspace-dialog {
+  background-color: #121214;
+}
+
+.workspace-dialog button.workspace-dialog-button {
+  background: $card-bg;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  box-shadow: none;
+  color: $panel-fg;
+  padding: 0 10px;
+  min-height: 26px;
+  min-width: 0;
+}
+
+.workspace-dialog button.workspace-dialog-button:hover {
+  background: $card-hover;
+}
+
+.workspace-dialog button.workspace-dialog-button:active {
+  background: $pill-active;
+}
+
+.workspace-dialog button.workspace-dialog-button:focus-visible {
+  outline: 1px solid $muted-fg;
+  outline-offset: -2px;
+}
+
+.workspace-dialog button.workspace-dialog-close {
+  padding: 0;
+  min-width: 26px;
+}
+
+.workspace-dialog-row {
+  background-color: $card-bg;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+}
+
+.workspace-dialog-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 6px 10px;
+  font-weight: 600;
+}
+
+.workspace-dialog-columns {
+  min-height: 64px;
+  padding: 12px;
+}
+
+.workspace-window-tile {
+  background-color: $card-bg;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.workspace-window-tile:hover {
+  background-color: $card-hover;
+}
+
+.workspace-dialog-status {
+  color: $muted-fg;
+}

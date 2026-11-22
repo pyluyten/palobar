@@ -3,6 +3,7 @@ import { Gdk, Gtk } from "ags/gtk4";
 import style from "./styles/main.scss";
 import { Bar } from "./widgets/Bar";
 import { CalendarPopup } from "./widgets/CalendarPopup";
+import { displayWorkspaces, WorkspaceDialog } from "./widgets/WorkspaceDialog";
 import { QuickSettings } from "./widgets/QuickSettings";
 import { NotificationToasts } from "./widgets/NotificationToasts";
 import { ClipboardPopup } from "./widgets/ClipboardPopup";
@@ -24,6 +25,11 @@ app.start({
     const cmd = request[0];
     if (cmd === "toggle-launcher" || cmd === "launcher") {
       toggleLauncher();
+      res("ok");
+      return;
+    }
+    if (cmd === "displayWorkspaces") {
+      displayWorkspaces();
       res("ok");
       return;
     }
@@ -84,6 +90,7 @@ app.start({
     if (primary) {
       CalendarPopup(primary);
       QuickSettings(primary);
+      WorkspaceDialog(primary);
       NotificationToasts(primary);
       ClipboardPopup(primary);
     }

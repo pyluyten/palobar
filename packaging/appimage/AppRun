@@ -20,7 +20,7 @@ esac
 
 if [ "$component" = ctl ]; then
   case "${1:-}" in
-    '') printf '%s\n' 'Usage: Palobar.AppImage ctl {lock|quit|toggle-launcher|run-command|version}'; exit ;;
+    '') printf '%s\n' 'Usage: Palobar.AppImage ctl {lock|quit|toggle-launcher|run-command|displayWorkspaces|version}'; exit ;;
     version) cat "$appdir/usr/share/palobar/version"; exit ;;
   esac
 fi

@@ -4,6 +4,7 @@ export type PopupName =
   | "calendar"
   | "quick-settings"
   | "clipboard"
+  | "workspaces"
   | null;
 
 const [activePopup, setActivePopup] = createState<PopupName>(null);
