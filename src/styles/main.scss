@@ -1,5 +1,6 @@
 $panel-bg: rgba(19, 19, 22, 0.92);
 $popup-bg: rgba(30, 30, 34, 0.96);
+$settings-bg: #333333;
 $card-bg: rgba(255, 255, 255, 0.07);
 $card-hover: rgba(255, 255, 255, 0.12);
 $panel-fg: #f6f5f4;
@@ -126,6 +127,13 @@ window.panel-window {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
+.popup-card.qs-card,
+.popup-card.calendar-card,
+.popup-card.clipboard-drawer,
+.popup-card.notif-toast {
+  background-color: $settings-bg;
+}
+
 /* Date menu */
 .calendar-card {
   min-height: 440px;
@@ -191,28 +199,46 @@ window.panel-window {
   }
 }
 
-.qs-slider trough {
-  min-height: 6px;
-  border-radius: 999px;
-  background-color: rgba(255, 255, 255, 0.16);
+.qs-volume .qs-icon-btn {
+  background-color: transparent;
+  padding: 6px;
+
+  &:hover {
+    background-color: $card-hover;
+  }
+
+  image {
+    -gtk-icon-size: 16px;
+  }
 }
 
-.qs-slider highlight {
-  border-radius: 999px;
-  background-color: $accent;
-}
+.qs-slider {
+  padding: 8px;
 
-.qs-slider slider {
-  min-width: 14px;
-  min-height: 14px;
-  border-radius: 999px;
-  background-color: #ffffff;
-}
+  trough,
+  highlight,
+  slider {
+    background-image: none;
+    border: none;
+    border-radius: 999px;
+    box-shadow: none;
+  }
 
-.qs-volume-pct {
-  min-width: 36px;
-  font-size: 12.5px;
-  color: $muted-fg;
+  trough {
+    min-height: 4px;
+    background-color: #606060;
+  }
+
+  highlight {
+    background-color: $accent;
+  }
+
+  slider {
+    min-width: 16px;
+    min-height: 16px;
+    margin: -6px -8px;
+    background-color: #ffffff;
+  }
 }
 
 .qs-toggle-pill {
@@ -563,7 +589,7 @@ window.launcher-window {
 }
 
 .media-player {
-  background-color: $card-bg;
+  background-color: $settings-bg;
   border-radius: 12px;
   padding: 12px;
 }

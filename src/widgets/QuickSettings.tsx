@@ -51,17 +51,13 @@ function VolumeSection() {
         min={0}
         max={1}
         value={volume}
+        tooltipText={volume((v) => `${Math.round(v * 100)}%`)}
         onChangeValue={({ value }) => {
           if (speaker) {
             speaker.volume = value;
             if (speaker.mute && value > 0) speaker.mute = false;
           }
         }}
-      />
-
-      <label
-        class="qs-volume-pct"
-        label={volume((v) => `${Math.round(v * 100)}%`)}
       />
     </box>
   );
