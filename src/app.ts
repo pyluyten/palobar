@@ -8,6 +8,7 @@ import { QuickSettings } from "./widgets/QuickSettings";
 import { NotificationToasts } from "./widgets/NotificationToasts";
 import { ClipboardPopup } from "./widgets/ClipboardPopup";
 import { toggleLauncher } from "./widgets/Launcher";
+import { toggleStandaloneDock } from "./widgets/StandaloneDock";
 import { toggleRunCommand } from "./widgets/RunCommand";
 import { initOverviewCapture } from "./widgets/OverviewCapture";
 import { initWallpaperService, stopWallpaper } from "./services/wallpaper";
@@ -25,6 +26,11 @@ app.start({
     const cmd = request[0];
     if (cmd === "toggle-launcher" || cmd === "launcher") {
       toggleLauncher();
+      res("ok");
+      return;
+    }
+    if (cmd === "display-dock") {
+      toggleStandaloneDock();
       res("ok");
       return;
     }

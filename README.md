@@ -59,11 +59,12 @@ If you click on the workspaces button in the top bar, niri might move the cursor
 
 ## components 
 
-* `palobar` imitates gnome-panel + launcher
-* `palobar-ctl toggle-launcher` to activate launcher independantly from overwiew
-* Right-click the workspace switcher or run `palobar ctl displayWorkspaces` to view and rename workspaces. Drop a window icon outside the workspace cards to close it and press Esc to dismiss the dialog.
+* `palobar` imitates gnome-panel + launcher which is shown when overview is opened
 * `palobar-prefs` imitates gnome-control-center
 * `palobar-run-command` will use niri spawn-sh to run anything.
+* `palobar-ctl toggle-launcher` to activate launcher independantly from overwiew
+* `palobar ctl display-dock` to show the dock on its own
+* `palobar ctl displayWorkspaces` or right click workspaces to view and rename workspaces
     This includes running `palobar` since you do not need it to run.
 * `palobar-ctl quit` is mostly useful for me
 
