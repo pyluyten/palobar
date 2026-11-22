@@ -481,34 +481,48 @@ window.launcher-window {
 }
 
 .launcher-dock {
-  background-color: rgba(34, 34, 40, 0.85);
+  background-color: $settings-bg;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 22px;
-  padding: 8px 14px;
+  border-radius: 33px;
+  padding: 12px 21px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
-.launcher-dock-item {
-  background: transparent;
-  background-image: none;
-  box-shadow: none;
-  border: none;
-  border-radius: 14px;
-  padding: 6px 8px;
-  transition: background-color 140ms ease;
+.launcher-dock-menu {
+  > contents,
+  > arrow {
+    background: $settings-bg;
+    color: $panel-fg;
+  }
 
-  &:hover {
-    background-color: rgba(255, 255, 255, 0.12);
+  button {
+    padding: 6px 12px;
   }
 }
 
-.launcher-dock-item.launcher-show-apps {
-  background-color: rgba(255, 255, 255, 0.09);
-  color: #fff;
+.launcher-dock-item,
+.launcher-dock-menu button {
+  background: $card-bg;
+  box-shadow: none;
+  border: none;
+  color: $panel-fg;
+  transition: background-color 150ms ease;
 
-  &:hover,
+  &:hover {
+    background-color: $card-hover;
+  }
+
+  &:disabled {
+    color: $muted-fg;
+  }
+}
+
+.launcher-dock-item {
+  border-radius: 21px;
+  padding: 9px 12px;
+
   &:checked {
-    background-color: rgba(255, 255, 255, 0.18);
+    background-color: $pill-active;
   }
 }
 

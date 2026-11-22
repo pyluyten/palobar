@@ -10,6 +10,7 @@ export interface NiriWindow {
   id: number;
   title: string | null;
   app_id: string | null;
+  pid?: number | null;
   workspace_id: number | null;
   is_focused: boolean;
   layout?: { pos_in_scrolling_layout?: [number, number] | null };
@@ -102,6 +103,14 @@ class NiriService {
 
   async closeWindow(id: number) {
     await execAsync(["niri", "msg", "action", "close-window", "--id", String(id)]);
+  }
+
+  async forceKillWindow(id: number, pid: number) {
+    const window = (await this.queryWindows()).find((candidate) => candidate.id === id);
+    if (!window || window.pid !== pid || !Number.isSafeInteger(pid) || pid <= 1) {
+      throw new Error("The window no longer has a matching process");
+    }
+    await execAsync(["kill", "-KILL", String(pid)]);
   }
 
   async moveWindowToWorkspace(windowId: number, workspaceId: number) {
