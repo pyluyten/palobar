@@ -149,9 +149,9 @@ export function Bar(gdkmonitor: Gdk.Monitor, index: number) {
           tooltipText="Calendar and Notifications"
           onClicked={() => popups.toggle("calendar")}
         >
-          <box spacing={6}>
-            <label label={date} />
+          <box spacing={12}>
             <NotificationBadge />
+            <label label={date} />
           </box>
         </button>
 
