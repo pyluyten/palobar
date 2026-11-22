@@ -15,6 +15,7 @@ import { buildNiriPage } from "./prefs/niri";
 import { buildSoundPage } from "./prefs/sound";
 import { buildPowerPage } from "./prefs/power";
 import { buildAppearancePage } from "./prefs/appearance";
+import { buildMousePage } from "./prefs/mouse";
 import { buildSecurityPage } from "./prefs/security";
 import { buildKeyboardPage } from "./prefs/keyboard";
 import { buildPrintersPage } from "./prefs/printers";
@@ -83,6 +84,7 @@ function buildPrefsWindow() {
   stack.add_named(buildPowerPage(ctx), "power");
   stack.add_named(buildNiriPage(win), "niri");
   stack.add_named(buildAppearancePage(win, ctx), "appearance");
+  stack.add_named(buildMousePage(), "mouse");
   stack.add_named(buildKeyboardPage(win), "keyboard");
   stack.add_named(buildPrintersPage(), "printers");
   stack.add_named(buildSecurityPage(win, ctx), "security");
@@ -150,6 +152,11 @@ function buildPrefsWindow() {
       id: "appearance",
       label: "Appearance",
       icon: "preferences-desktop-wallpaper-symbolic",
+    },
+    {
+      id: "mouse",
+      label: "Mouse",
+      icon: "input-mouse-symbolic",
     },
     {
       id: "keyboard",
