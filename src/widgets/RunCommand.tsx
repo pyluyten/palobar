@@ -4,6 +4,7 @@ import { execAsync } from "ags/process";
 import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 import { popups } from "../services/popups";
+import { getAccentColor, subscribeAppearance } from "../services/appearance";
 import { loadRunHistory, recordRun, type RunHistoryEntry } from "../services/run-history";
 
 let runWindow: Gtk.Window | null = null;
@@ -141,8 +142,6 @@ export function toggleRunCommand(
     return;
   }
 
-  onCloseCallback = onClose ?? null;
-
   popups.close();
 
   const targetMonitor = monitor ?? app.get_monitors()[0];
@@ -238,9 +237,9 @@ export function toggleRunCommand(
   });
 
   const showTerminalMode = (inTerminal: boolean) => {
-    const position = Gtk.EntryIconPosition.SECONDARY;
-    entry.set_icon_from_icon_name(position, inTerminal ? "utilities-terminal-symbolic" : null);
-    entry.set_icon_tooltip_text(position, inTerminal ? "Run in Terminal" : null);
+    if (inTerminal) entry.add_css_class("run-command-terminal");
+    else entry.remove_css_class("run-command-terminal");
+    entry.set_icon_tooltip_text(Gtk.EntryIconPosition.PRIMARY, inTerminal ? "Run in Terminal" : null);
   };
 
   entry.connect("changed", () => {
@@ -363,6 +362,19 @@ export function toggleRunCommand(
   });
   win.add_controller(backdropClick);
 
+  const display = targetMonitor.get_display();
+  const accentProvider = new Gtk.CssProvider();
+  Gtk.StyleContext.add_provider_for_display(display, accentProvider, Gtk.STYLE_PROVIDER_PRIORITY_USER + 1);
+  const unsubscribeAccent = subscribeAppearance("accent-color", () => {
+    accentProvider.load_from_string(`
+      entry.run-command-terminal image { color: ${getAccentColor().hex}; }
+    `);
+  });
+  onCloseCallback = () => {
+    unsubscribeAccent();
+    Gtk.StyleContext.remove_provider_for_display(display, accentProvider);
+    onClose?.();
+  };
   runWindow = win;
 
   GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
