@@ -47,11 +47,18 @@ The goal is to achieve a cheap clone and be close visually. But it is not intend
 
 </details>
 
-# Principles
+# Usage
 
-The code is typescript and depends on ags astal. I thought I would use gjs for a mockup but it seems to be a reasonnable choice and may stick to it. Project is too young to describe installation which is only fine with nix atm.
+## Niri Notes
 
-Components are:
+If you click on the workspaces button in the top bar, niri might move the cursor. You may prevent this if you uncomment this in you `config.kdl`
+
+```
+// warp-mouse-to-focus
+```
+
+## components 
+
 * `palobar` imitates gnome-panel + launcher
 * `palobar-ctl toggle-launcher` to activate launcher independantly from overwiew
 * `palobar-prefs` imitates gnome-control-center
@@ -59,12 +66,29 @@ Components are:
     This includes running `palobar` since you do not need it to run.
 * `palobar-ctl quit` is mostly useful for me
 
+
+### nixos
+
+under nixos (or just using nix), simply use `nix build`, `nix install` to make all components available.
+
+### Convenience appimage
+
+an appimage is provided in git releases. Main point is you may use palobar without having to install astal which may be difficult to find.You may also build an appimage yourself reading instructions in packaging.
+
+download the appimage and chmod +x then use appimage like this. Once tested, you may add shortcuts to niri config file.
+
+`./<appimage>` to start the bar
+`./<appimage>` ctl version to check the version or other ctl commands like listed in components
+`./<appimage>` run-commands
+`./<appimage>` prefs
+
+# Principles / dev
+
+The code is typescript and depends on ags astal. I thought I would use gjs for a mockup but it seems to be a reasonnable choice and may stick to it.
+
+The dev is rather nix oriented and I will look at this among next steps.
+
 See [TODO](TODO.md).
 
 
-# Notes
-
-If you click on the workspaces button in the top bar, niri might move the cursor. You may prevent this if you uncomment this in you `config.kdl`
-
-    // warp-mouse-to-focus
 
