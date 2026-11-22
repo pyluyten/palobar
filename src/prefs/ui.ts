@@ -113,6 +113,10 @@ window.prefs-window {
   background-color: #dcdce2;
 }
 
+.prefs-btn:disabled {
+  opacity: 0.5;
+}
+
 .prefs-btn.primary {
   background-color: #3584e4;
   color: #ffffff;

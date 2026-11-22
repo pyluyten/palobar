@@ -1,10 +1,79 @@
 import { Gtk } from "ags/gtk4";
 import { execAsync } from "ags/process";
+import Gio from "gi://Gio";
+import GLib from "gi://GLib";
 import { makeGroupBox, makeRow } from "./ui";
 
 interface KeyboardLayouts {
   names: string[];
   current_idx: number;
+}
+
+const INPUT_SOURCES = [
+  {
+    name: "IBus",
+    services: [{ busName: "org.freedesktop.IBus", commands: ["ibus-setup"] }],
+  },
+  {
+    name: "Fcitx",
+    services: [
+      { busName: "org.fcitx.Fcitx5", commands: ["fcitx5-configtool", "fcitx5-config-qt"] },
+      { busName: "org.fcitx.Fcitx", commands: ["fcitx-configtool", "fcitx-config-gtk3", "fcitx-config"] },
+    ],
+  },
+];
+
+function appendInputSources(page: Gtk.Box, openFailed: (message: string, error: unknown) => void) {
+  const title = new Gtk.Label({ label: "Input Sources", xalign: 0 });
+  title.add_css_class("prefs-group-title");
+  page.append(title);
+
+  const group = makeGroupBox();
+  page.append(group);
+
+  INPUT_SOURCES.forEach(({ name, services }, index) => {
+    const row = makeRow(index === INPUT_SOURCES.length - 1);
+    const status = new Gtk.Label({ label: `Checking ${name}…`, xalign: 0, hexpand: true });
+    status.add_css_class("prefs-row-title");
+    const configure = new Gtk.Button({ label: `Configure ${name}`, sensitive: false });
+    configure.add_css_class("prefs-btn");
+    row.append(status);
+    row.append(configure);
+    group.append(row);
+
+    const running = new Set<string>();
+    let command: string | null = null;
+    let watchers: number[] = [];
+    const sync = () => {
+      const active = services.find(({ busName }) => running.has(busName));
+      const commands = active?.commands ?? [];
+      command = commands.map((tool) => GLib.find_program_in_path(tool)).find(Boolean) ?? null;
+      status.set_label(active ? `${name} is running` : `${name} is not running`);
+      configure.set_sensitive(command !== null);
+      configure.set_tooltip_text(active && !command ? `Install ${commands[0]} to configure ${name}` : null);
+    };
+
+    configure.connect("clicked", () => {
+      if (command) {
+        void execAsync([command]).catch((error) => openFailed(`Could not configure ${name}`, error));
+      }
+    });
+    page.connect("map", () => {
+      status.set_label(`Checking ${name}…`);
+      configure.set_sensitive(false);
+      watchers = services.map(({ busName }) => Gio.bus_watch_name(
+        Gio.BusType.SESSION, busName, Gio.BusNameWatcherFlags.NONE,
+        () => { running.add(busName); sync(); },
+        () => { running.delete(busName); sync(); },
+      ));
+    });
+    page.connect("unmap", () => {
+      for (const watcher of watchers) Gio.bus_unwatch_name(watcher);
+      watchers = [];
+      running.clear();
+      command = null;
+    });
+  });
 }
 
 export function buildKeyboardPage(win: Gtk.Window): Gtk.Widget {
@@ -100,6 +169,7 @@ export function buildKeyboardPage(win: Gtk.Window): Gtk.Widget {
       .catch((err) => alert("Could not show keyboard shortcuts", err));
   });
   page.append(shortcuts);
+  appendInputSources(page, alert);
 
   page.connect("map", () => void refresh());
   return new Gtk.ScrolledWindow({ hscrollbar_policy: Gtk.PolicyType.NEVER, child: page });
