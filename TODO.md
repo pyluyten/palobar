@@ -5,9 +5,11 @@ ____
 
 * Top Panel
     - [x] notification tray
+        - notification stacking
     - [x] media player
     - [x] workspace button
     - [x] clipboard+
+    - [ ] battery
     - [ ] power profile
     - [x] dark, light
     - [ ] night mode
@@ -18,49 +20,71 @@ ____
 * Launcher
     - [x] text entry
     - [x] dock
+        + add a command to toggle dock
     - [x] pages
 * [x] Command launcher
+    - command launcher history dialog
+    - more?
 
 
 ## about settings
 
 `env XDG_CURRENT_DESKTOP=GNOME gnome-control-center` to run it and use it or compare.
 
-| gnome-settings | palobar |
-| - | - |
-| wifi | todo. but quicksettings already provide 99%. |
-| network | todo. but minor |
-| bluetooth | **todo** |
-| screens | *Done* for v1. |
-| sound | *Done*. |
-| energy | todo |
-| multi task | Done, in a sense... |
-| appearance | Done |
-| notification | todo |
-| research | could it be? |
-| accounts | todo , or not|
-| share | todo |
-| wellbeing | todo |
-| mouse | todo |
-| keyb | todo: add fcitx |
-| colors | todo ?|
-| printers | *DONE* |
-| accessibilty | todo |
-| private -lock | done |
-| private -gps | done |
-| private -history | done |
-| private -camera | done |
-| private -security | done |
-| system-locale | todo |
-| system-datetime | todo |
-| system-datetime | todo |
-| system-users | todo |
-| system-ssh | todo |
-| system-about | todo |
+| gnome-settings    | palobar                                      |
+| ----------------- | -------------------------------------------- |
+| wifi              | todo. but quicksettings already provide 99%. |
+| network           | todo. but minor                              |
+| bluetooth         | **todo**                                     |
+| screens           | ☑ *Done* for v1.                             |
+| sound             | ☑ *Done*.                                    |
+| energy            | todo                                         |
+| multi task        | ☑ Done, in a sense...                        |
+| appearance        | ☑ Done                                       |
+| notification      | todo                                         |
+| research          | could it be?                                 |
+| accounts          | todo , or not                                |
+| share             | todo                                         |
+| wellbeing         | todo                                         |
+| mouse             | ☑ Done for v1.                               |
+| keyb              | ☑ Done for v1.                               |
+| colors            | todo ?                                       |
+| printers          | ☑ *DONE*                                     |
+| accessibilty      | todo                                         |
+| private -lock     | todo                                         |
+| private -gps      | todo                                         |
+| private -history  | todo                                         |
+| private -camera   | todo                                         |
+| private -security | todo                                         |
+| system-locale     | todo                                         |
+| system-datetime   | todo                                         |
+| system-datetime   | todo                                         |
+| system-users      | todo                                         |
+| system-ssh        | todo                                         |
+| system-about      | Done                                         |
 
+More settings from "tweaks"
+
+| gnome-adjustment | palobar                                      |
+| ---------------- | -------------------------------------------- |
+| font             | todo. but quicksettings already provide 99%. |
+| rendering        | todo. but minor                              |
+| cursor           | ☑ Done (in mouse)                            |
+| icons            |                                              |
+| startup apps     | *Parse Niri? add to Niri ?*                  |
 
 ## Meta
 
 - Be easy to install
-- Plugins, like which-key?
+  appimage proved feasible to solve the issue when ags/astal are not available.
+  more testing need but "easy to install" may be solved
+
 - Change tech if too heavy or uneasy
+  gjs seems to consume 100mo *and to be stable* so rewrite seems unecessary.
+  worse case, rewrite only the bar + its widgets once stabilized.
+
+- Plugins
+  would be nice to be able to activate or not some applets
+  drop some custom css
+
+
