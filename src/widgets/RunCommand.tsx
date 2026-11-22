@@ -4,6 +4,7 @@ import { execAsync } from "ags/process";
 import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 import { popups } from "../services/popups";
+import { loadRunHistory, recordRun, type RunHistoryEntry } from "../services/run-history";
 
 let runWindow: Gtk.Window | null = null;
 let onCloseCallback: (() => void) | null = null;
@@ -79,16 +80,17 @@ function findTerminal(): { bin: string; flag: string | null } | null {
 
 async function executeCommand(cmd: string, inTerminal = false) {
   const trimmed = cmd.trim();
-  if (!trimmed) return;
+  const window = runWindow;
+  if (!trimmed || !window?.get_visible()) return;
 
-  if (runWindow) {
-    runWindow.set_visible(false);
-  }
+  window.set_visible(false);
 
+  let terminalLaunched = false;
   let argv: string[];
   if (inTerminal) {
     const term = findTerminal();
     if (term) {
+      terminalLaunched = true;
       argv = term.flag
         ? [
             "niri",
@@ -122,10 +124,11 @@ async function executeCommand(cmd: string, inTerminal = false) {
 
   try {
     await execAsync(argv);
+    recordRun(trimmed, terminalLaunched);
   } catch (err) {
     console.error("[run-command] niri spawn failed:", err);
   } finally {
-    closeRunCommand();
+    if (runWindow === window) closeRunCommand();
   }
 }
 
@@ -147,6 +150,11 @@ export function toggleRunCommand(
 
   const { TOP, BOTTOM, LEFT, RIGHT } = Astal.WindowAnchor;
   const allCommands = collectPathExecutables();
+  const history = loadRunHistory();
+  let draft = "";
+  let historyMatches: RunHistoryEntry[] = [];
+  let historyIndex = -1;
+  let recallingHistory = false;
   let matches: string[] = [];
   let selectedIndex = 0;
 
@@ -229,14 +237,49 @@ export function toggleRunCommand(
     }
   });
 
+  const showTerminalMode = (inTerminal: boolean) => {
+    const position = Gtk.EntryIconPosition.SECONDARY;
+    entry.set_icon_from_icon_name(position, inTerminal ? "utilities-terminal-symbolic" : null);
+    entry.set_icon_tooltip_text(position, inTerminal ? "Run in Terminal" : null);
+  };
+
   entry.connect("changed", () => {
-    renderMatches(entry.text);
+    if (recallingHistory) return;
+    draft = entry.text;
+    historyIndex = -1;
+    historyMatches = [];
+    showTerminalMode(false);
+    renderMatches(draft);
   });
 
+  const navigateHistory = (direction: -1 | 1): boolean => {
+    if (historyIndex === -1) {
+      if (direction === -1) return false;
+      historyMatches = history.filter(({ command }) => command.startsWith(draft.trimStart()));
+      if (!historyMatches.length) return false;
+    }
+
+    historyIndex = Math.min(historyMatches.length - 1, historyIndex + direction);
+    const recalled = historyMatches[historyIndex];
+    recallingHistory = true;
+    try {
+      entry.set_text(recalled?.command ?? draft);
+      entry.set_position(-1);
+    } finally {
+      recallingHistory = false;
+    }
+    showTerminalMode(recalled?.inTerminal ?? false);
+    if (recalled) {
+      matches = [];
+      listBox.set_visible(false);
+    } else {
+      renderMatches(draft);
+    }
+    return true;
+  };
+
   entry.connect("activate", () => {
-    const text = entry.text.trim();
-    if (!text) return;
-    executeCommand(text);
+    executeCommand(entry.text, historyMatches[historyIndex]?.inTerminal ?? false);
   });
 
   const entryKeyCtrl = new Gtk.EventControllerKey();
@@ -258,6 +301,8 @@ export function toggleRunCommand(
       }
       return true;
     }
+    if (keyval === Gdk.KEY_Up && navigateHistory(1)) return true;
+    if (keyval === Gdk.KEY_Down && navigateHistory(-1)) return true;
     if (keyval === Gdk.KEY_Down && matches.length > 0) {
       selectedIndex = (selectedIndex + 1) % matches.length;
       updateSelection();
