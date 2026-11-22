@@ -4,9 +4,9 @@ import { createPoll } from "ags/time";
 import { createState, For } from "ags";
 import AstalWp from "gi://AstalWp";
 import AstalNetwork from "gi://AstalNetwork";
-import AstalNotifd from "gi://AstalNotifd";
 import { niri, type NiriWorkspace } from "../services/niri";
 import { popups } from "../services/popups";
+import { unreadNotificationCount } from "../services/unread-notifications";
 import { SysTray } from "./Tray";
 
 function formatGnomeDate(): string {
@@ -99,19 +99,11 @@ function SystemIndicators() {
 }
 
 function NotificationBadge() {
-  const notifd = AstalNotifd.get_default();
-  const [count, setCount] = createState(notifd.notifications.length);
-
-  const sync = () => setCount(notifd.notifications.length);
-  notifd.connect("notified", sync);
-  notifd.connect("resolved", sync);
-  notifd.connect("notify::notifications", sync);
-
   return (
     <label
       class="notif-badge"
-      visible={count((c) => c > 0)}
-      label={count((c) => String(c))}
+      visible={unreadNotificationCount((count) => count > 0)}
+      label={unreadNotificationCount(String)}
     />
   );
 }
