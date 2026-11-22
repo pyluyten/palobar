@@ -91,7 +91,7 @@ export function createMiniDock(opts: MiniDockOptions) {
     name: string,
     iconName: string,
     running: NiriWindow | undefined,
-    activate: () => void,
+    launch: (() => void) | undefined,
     desktop?: Gio.DesktopAppInfo,
     favoriteId?: string,
   ) => {
@@ -117,7 +117,13 @@ export function createMiniDock(opts: MiniDockOptions) {
     button.set_child(item);
     const clickedId = button.connect("clicked", () => {
       opts.onActivateApp();
-      activate();
+      if (running) {
+        niri.closeOverview()
+          .then(() => niri.focusWindow(running.id))
+          .catch((err) => console.error("[dock] failed to close the overview:", err));
+      } else {
+        launch?.();
+      }
     });
     itemSignals.push(() => button.disconnect(clickedId));
     if (desktop || favoriteId || running) {
@@ -241,8 +247,7 @@ export function createMiniDock(opts: MiniDockOptions) {
         favorite?.iconName || desktop?.get_icon()?.to_string() || "application-x-executable",
         running,
         () => {
-          if (running) niri.focusWindow(running.id);
-          else if (favorite) favorite.launch();
+          if (favorite) favorite.launch();
           else desktop?.launch([], null);
         },
         desktop,
@@ -253,7 +258,7 @@ export function createMiniDock(opts: MiniDockOptions) {
     for (const window of runningApps.values()) {
       const appId = window.app_id || window.title || "application";
       const { name, iconName, desktop } = resolveAppInfo(appId, opts.appsService, allApps);
-      appendApp(name, iconName, window, () => niri.focusWindow(window.id), desktop);
+      appendApp(name, iconName, window, undefined, desktop);
     }
 
     if (opts.acceptFavorites && !dockBox.get_first_child()) {

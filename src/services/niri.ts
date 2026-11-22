@@ -192,6 +192,10 @@ class NiriService {
     await this.sendAction("focus-workspace", String(idx));
   }
 
+  async closeOverview() {
+    await execAsync(["niri", "msg", "action", "close-overview"]);
+  }
+
   async toggleOverview() {
     await this.sendAction("toggle-overview");
   }
