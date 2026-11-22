@@ -1,6 +1,6 @@
 import app from "ags/gtk4/app";
 import { Astal, Gdk, Gtk } from "ags/gtk4";
-import { createState } from "ags";
+import { createComputed, createState } from "ags";
 import {
   copyClipboardEntry,
   decodeClipboardBytes,
@@ -14,26 +14,30 @@ import { popups } from "../services/popups";
 
 export function ClipboardPopup(gdkmonitor: Gdk.Monitor) {
   const { TOP, RIGHT } = Astal.WindowAnchor;
+  const panelHeight = Math.min(480, Math.floor(gdkmonitor.get_geometry().height * 0.8));
 
   const [entries, setEntries] = createState<ClipboardEntry[]>([]);
   const [filterText, setFilterText] = createState("");
 
   const [watchError, setWatchError] = createState<string | null>(null);
+  const [loading, setLoading] = createState(false);
 
   let listContainer!: Gtk.Box;
   let searchEntry!: Gtk.Entry;
   let renderToken = 0;
+  let refreshToken = 0;
+
+  const clearList = () => {
+    if (!listContainer) return;
+    while (listContainer.get_first_child()) {
+      listContainer.remove(listContainer.get_first_child()!);
+    }
+  };
 
   const rebuildList = () => {
     if (!listContainer) return;
     const token = ++renderToken;
-
-    let child = listContainer.get_first_child();
-    while (child) {
-      const next = child.get_next_sibling();
-      listContainer.remove(child);
-      child = next;
-    }
+    clearList();
 
     const q = filterText.get().trim().toLowerCase();
     const filtered = q
@@ -120,7 +124,12 @@ export function ClipboardPopup(gdkmonitor: Gdk.Monitor) {
   };
 
   const refresh = async () => {
+    if (popups.active.get() !== "clipboard") return;
+    const token = ++refreshToken;
+    setLoading(true);
     const list = await listClipboardEntries(25);
+    if (token !== refreshToken) return;
+    setLoading(false);
     setWatchError(getClipboardWatchError());
     setEntries(list);
     rebuildList();
@@ -132,15 +141,11 @@ export function ClipboardPopup(gdkmonitor: Gdk.Monitor) {
       setFilterText("");
       refresh();
     } else {
+      refreshToken++;
       renderToken++;
-      if (listContainer) {
-        let child = listContainer.get_first_child();
-        while (child) {
-          const next = child.get_next_sibling();
-          listContainer.remove(child);
-          child = next;
-        }
-      }
+      clearList();
+      setEntries([]);
+      setLoading(false);
     }
   });
 
@@ -169,6 +174,7 @@ export function ClipboardPopup(gdkmonitor: Gdk.Monitor) {
     >
       <box
         class="popup-card clipboard-drawer"
+        heightRequest={panelHeight}
         orientation={Gtk.Orientation.VERTICAL}
         spacing={12}
       >
@@ -209,19 +215,23 @@ export function ClipboardPopup(gdkmonitor: Gdk.Monitor) {
           class="notif-empty"
           orientation={Gtk.Orientation.VERTICAL}
           spacing={8}
+          vexpand
+          valign={Gtk.Align.CENTER}
           visible={entries((list) => list.length === 0)}
         >
           <image iconName="edit-paste-symbolic" />
           <label
-            label={watchError((error) => error ?? "Clipboard is empty")}
+            label={createComputed(() => loading()
+              ? "Loading clipboard history…"
+              : watchError() ?? "Clipboard is empty")}
             maxWidthChars={38}
             wrap
           />
         </box>
 
         <Gtk.ScrolledWindow
-          maxContentHeight={560}
-          propagateNaturalHeight
+          hscrollbarPolicy={Gtk.PolicyType.NEVER}
+          vexpand
           visible={entries((list) => list.length > 0)}
         >
           <box
