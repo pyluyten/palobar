@@ -395,7 +395,7 @@ window.panel-window {
 
 /* Activities Launcher */
 window.launcher-window {
-  background-color: rgba(22, 22, 26, 0.72);
+  background-color: rgba(22, 22, 26, 0.90);
   color: $panel-fg;
   font-family: "Cantarell", "Inter", sans-serif;
 }
@@ -481,7 +481,7 @@ window.launcher-window {
 }
 
 .launcher-dock {
-  background-color: $settings-bg;
+  background-color: rgba($settings-bg, 0.72);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 33px;
   padding: 12px 21px;

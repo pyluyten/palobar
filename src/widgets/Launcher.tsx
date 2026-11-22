@@ -10,7 +10,7 @@ import { createMiniDock } from "./Dock";
 const PAGE_COLS = 8;
 const PAGE_ROWS = 3;
 const APPS_PER_PAGE = PAGE_COLS * PAGE_ROWS;
-const APP_ICON_SIZE = 54;
+const APP_ICON_SIZE = 81;
 
 let launcherWindow: Gtk.Window | null = null;
 let disposeLauncher: (() => void) | null = null;
