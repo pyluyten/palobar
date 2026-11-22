@@ -29,12 +29,12 @@ app.start({
       res("ok");
       return;
     }
-    if (cmd === "display-dock") {
+    if (cmd === "toggle-dock") {
       toggleStandaloneDock();
       res("ok");
       return;
     }
-    if (cmd === "displayWorkspaces") {
+    if (cmd === "display-workspaces") {
       displayWorkspaces();
       res("ok");
       return;
