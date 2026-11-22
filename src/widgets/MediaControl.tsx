@@ -2,7 +2,6 @@ import { Gtk } from "ags/gtk4";
 import { createBinding, createComputed, For } from "ags";
 import AstalMpris from "gi://AstalMpris";
 import Pango from "gi://Pango";
-import { popups } from "../services/popups";
 
 function MediaPlayer({ player }: { player: AstalMpris.Player }) {
   const title = createBinding(player, "title");
@@ -77,44 +76,27 @@ export function MediaControl() {
   const mpris = AstalMpris.get_default();
   const players = createBinding(mpris, "players")((list) => list ?? []);
 
-  const playing = createComputed(() =>
-    players().some((player) =>
-      createBinding(player, "playback_status")() === AstalMpris.PlaybackStatus.PLAYING,
-    ),
-  );
-
-  const popover = new Gtk.Popover({
-    position: Gtk.PositionType.BOTTOM,
-    child: (
+  return (
+    <box orientation={Gtk.Orientation.VERTICAL} spacing={8}>
+      <label class="qs-title" xalign={0} label="Media" />
+      <label
+        class="media-player media-player-subtitle"
+        xalign={0}
+        label="No Media Playing"
+        visible={players((list) => list.length === 0)}
+      />
       <Gtk.ScrolledWindow
         hscrollbarPolicy={Gtk.PolicyType.NEVER}
-        maxContentHeight={380}
+        maxContentHeight={174}
         propagateNaturalHeight
+        visible={players((list) => list.length > 0)}
       >
-        <box class="media-player-list" orientation={Gtk.Orientation.VERTICAL} spacing={8}>
+        <box orientation={Gtk.Orientation.VERTICAL} spacing={8}>
           <For each={players}>
             {(player) => <MediaPlayer player={player} />}
           </For>
         </box>
       </Gtk.ScrolledWindow>
-    ) as Gtk.Widget,
-  });
-  popover.add_css_class("media-popover");
-
-  popover.connect("show", () => popups.close());
-
-  return (
-    <Gtk.MenuButton
-      class={playing((active) => active ? "media-button" : "media-button idle")}
-      iconName="multimedia-player-symbolic"
-      tooltipText="Media Controls"
-      sensitive={players((list) => list.length > 0)}
-      popover={popover}
-      $={(button) => {
-        button.connect("notify::sensitive", () => {
-          if (!button.get_sensitive()) button.popdown();
-        });
-      }}
-    />
+    </box>
   );
 }

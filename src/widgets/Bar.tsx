@@ -8,7 +8,6 @@ import AstalNotifd from "gi://AstalNotifd";
 import { niri, type NiriWorkspace } from "../services/niri";
 import { popups } from "../services/popups";
 import { SysTray } from "./Tray";
-import { MediaControl } from "./MediaControl";
 
 function formatGnomeDate(): string {
   const now = new Date();
@@ -99,38 +98,21 @@ function SystemIndicators() {
   );
 }
 
-function NotificationIndicator() {
+function NotificationBadge() {
   const notifd = AstalNotifd.get_default();
   const [count, setCount] = createState(notifd.notifications.length);
-  const [dnd, setDnd] = createState(notifd.dontDisturb);
 
   const sync = () => setCount(notifd.notifications.length);
   notifd.connect("notified", sync);
   notifd.connect("resolved", sync);
   notifd.connect("notify::notifications", sync);
-  notifd.connect("notify::dont-disturb", () => setDnd(notifd.dontDisturb));
 
   return (
-    <button
-      class={`panel-button notifications-button ${popups.active((p) => (p === "notifications" ? "open" : ""))}`}
-      tooltipText="Notifications"
-      onClicked={() => popups.toggle("notifications")}
-    >
-      <box spacing={5}>
-        <image
-          iconName={dnd((d) =>
-            d
-              ? "notifications-disabled-symbolic"
-              : "preferences-system-notifications-symbolic",
-          )}
-        />
-        <label
-          class="notif-badge"
-          visible={count((c) => c > 0)}
-          label={count((c) => String(c))}
-        />
-      </box>
-    </button>
+    <label
+      class="notif-badge"
+      visible={count((c) => c > 0)}
+      label={count((c) => String(c))}
+    />
   );
 }
 
@@ -155,23 +137,21 @@ export function Bar(gdkmonitor: Gdk.Monitor, index: number) {
         </box>
 
         {/* Center: Date & Time */}
-        <centerbox $type="center" class="panel-center">
-          <box $type="start">
-            <MediaControl />
-          </box>
-          <button
-            $type="center"
-            class={`panel-button clock-button ${popups.active((p) => (p === "calendar" ? "open" : ""))}`}
-            onClicked={() => popups.toggle("calendar")}
-          >
+        <button
+          $type="center"
+          class={`panel-button clock-button ${popups.active((p) => (p === "calendar" ? "open" : ""))}`}
+          tooltipText="Calendar and Notifications"
+          onClicked={() => popups.toggle("calendar")}
+        >
+          <box spacing={6}>
             <label label={date} />
-          </button>
-        </centerbox>
+            <NotificationBadge />
+          </box>
+        </button>
 
-        {/* Right: SysTray + Notification tray + Clipboard + Network + Volume + Session */}
+        {/* Right: SysTray + Clipboard + Network + Volume + Session */}
         <box $type="end" class="panel-right" spacing={4}>
           <SysTray />
-          <NotificationIndicator />
 
           <button
             class={`panel-button clipboard-button ${popups.active((p) => (p === "clipboard" ? "open" : ""))}`}

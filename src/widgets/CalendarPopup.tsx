@@ -2,6 +2,8 @@ import app from "ags/gtk4/app";
 import { Astal, Gdk, Gtk } from "ags/gtk4";
 import { createPoll } from "ags/time";
 import { popups } from "../services/popups";
+import { MediaControl } from "./MediaControl";
+import { NotificationsSection } from "./NotificationsPopup";
 
 function getFullDate(): { weekday: string; fullDate: string } {
   const now = new Date();
@@ -41,21 +43,28 @@ export function CalendarPopup(gdkmonitor: Gdk.Monitor) {
         self.add_controller(keyCtrl);
       }}
     >
-      <box class="popup-card calendar-card" orientation={Gtk.Orientation.VERTICAL} spacing={12}>
-        <box class="calendar-header" orientation={Gtk.Orientation.VERTICAL} spacing={2}>
-          <label
-            class="calendar-weekday"
-            halign={Gtk.Align.START}
-            label={header((h) => h.weekday)}
-          />
-          <label
-            class="calendar-date"
-            halign={Gtk.Align.START}
-            label={header((h) => h.fullDate)}
-          />
+      <box class="popup-card calendar-card" spacing={18}>
+        <box class="date-menu-feed" orientation={Gtk.Orientation.VERTICAL} spacing={14}>
+          <MediaControl />
+          <Gtk.Separator />
+          <NotificationsSection />
         </box>
-
-        <Gtk.Calendar class="gnome-calendar" />
+        <Gtk.Separator orientation={Gtk.Orientation.VERTICAL} />
+        <box class="date-menu-calendar" orientation={Gtk.Orientation.VERTICAL} spacing={12}>
+          <box class="calendar-header" orientation={Gtk.Orientation.VERTICAL} spacing={2}>
+            <label
+              class="calendar-weekday"
+              halign={Gtk.Align.START}
+              label={header((h) => h.weekday)}
+            />
+            <label
+              class="calendar-date"
+              halign={Gtk.Align.START}
+              label={header((h) => h.fullDate)}
+            />
+          </box>
+          <Gtk.Calendar class="gnome-calendar" />
+        </box>
       </box>
     </window>
   );

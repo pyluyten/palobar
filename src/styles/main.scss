@@ -33,8 +33,7 @@ window.panel-window {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.panel-button,
-.media-button > button {
+.panel-button {
   background: transparent;
   border: none;
   border-radius: 999px;
@@ -100,7 +99,6 @@ window.panel-window {
 }
 
 .system-menu-button image,
-.notifications-button image,
 .clipboard-button image,
 .tray-item image {
   -gtk-icon-size: 15px;
@@ -128,9 +126,17 @@ window.panel-window {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
-/* Calendar */
+/* Date menu */
 .calendar-card {
-  min-width: 300px;
+  min-height: 440px;
+}
+
+.date-menu-feed {
+  min-width: 340px;
+}
+
+.date-menu-calendar {
+  min-width: 250px;
 }
 
 .calendar-weekday {
@@ -291,10 +297,6 @@ window.panel-window {
 }
 
 /* Notifications */
-.notif-drawer {
-  min-width: 360px;
-}
-
 .notif-dnd-btn,
 .notif-clear-btn {
   background-color: $card-bg;
@@ -558,24 +560,6 @@ window.launcher-window {
 
 .clipboard-thumb {
   border-radius: 8px;
-}
-
-.media-button.idle > button {
-  color: rgba(246, 245, 244, 0.38);
-}
-
-.media-button > button:checked {
-  background-color: $pill-active;
-}
-
-.media-popover > contents {
-  background-color: $popup-bg;
-  border-radius: 18px;
-  color: $panel-fg;
-}
-
-.media-player-list {
-  min-width: 248px;
 }
 
 .media-player {

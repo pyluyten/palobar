@@ -4,7 +4,6 @@ import style from "./styles/main.scss";
 import { Bar } from "./widgets/Bar";
 import { CalendarPopup } from "./widgets/CalendarPopup";
 import { QuickSettings } from "./widgets/QuickSettings";
-import { NotificationsPopup } from "./widgets/NotificationsPopup";
 import { NotificationToasts } from "./widgets/NotificationToasts";
 import { ClipboardPopup } from "./widgets/ClipboardPopup";
 import { toggleLauncher } from "./widgets/Launcher";
@@ -85,7 +84,6 @@ app.start({
     if (primary) {
       CalendarPopup(primary);
       QuickSettings(primary);
-      NotificationsPopup(primary);
       NotificationToasts(primary);
       ClipboardPopup(primary);
     }

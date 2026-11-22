@@ -3,7 +3,6 @@ import { createState } from "ags";
 export type PopupName =
   | "calendar"
   | "quick-settings"
-  | "notifications"
   | "clipboard"
   | null;
 
