@@ -18,8 +18,12 @@ notifd.connect("resolved", (_source, id) => {
   if (unread.delete(id)) setCount(unread.size);
 });
 
-popups.active.subscribe(() => {
-  if (popups.active.get() !== "calendar") return;
+export function markNotificationsRead() {
+  if (unread.size === 0) return;
   unread.clear();
   setCount(0);
+}
+
+popups.active.subscribe(() => {
+  if (popups.active.get() === "calendar") markNotificationsRead();
 });

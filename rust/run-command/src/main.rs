@@ -1,7 +1,9 @@
 mod bar;
+mod calendar;
 mod dock;
 mod history;
 mod lockscreen;
+mod panel_popup;
 mod quick_settings;
 mod run_command;
 
@@ -10,13 +12,14 @@ use gtk::prelude::*;
 use gtk::{gdk, gio, glib};
 use std::collections::HashMap;
 
-const HELP: &str = "Usage: palobar-run-command-rs <run-command | run-panel | toggle-dock | toggle-quick-settings | lock | version>
+const HELP: &str = "Usage: palobar-run-command-rs <run-command | run-panel | toggle-dock | toggle-quick-settings | toggle-calendar | lock | version>
 
 Commands
   run-command            Open the command launcher
   run-panel              Open the panel
   toggle-dock            Toggle the standalone dock
   toggle-quick-settings  Toggle Quick Settings
+  toggle-calendar        Toggle Calendar and Notifications
   lock                   Lock the Wayland session
   version                Print the Palobar version";
 
@@ -35,7 +38,18 @@ fn main() -> ExitCode {
         Some("run-command") => run_command::run(),
         Some("run-panel") => bar::run(),
         Some("toggle-dock") => dock::run(),
-        Some(quick_settings::ACTION) => toggle_quick_settings(),
+        Some(quick_settings::ACTION) => toggle_popup(
+            quick_settings::ACTION,
+            "io.Astal.Palobar.RustQuickSettings",
+            quick_settings::install_style,
+            quick_settings::toggle_first_monitor,
+        ),
+        Some(calendar::ACTION) => toggle_popup(
+            calendar::ACTION,
+            "io.Astal.Palobar.RustCalendar",
+            calendar::install_style,
+            calendar::toggle_first_monitor,
+        ),
         Some("lock") => lockscreen::run(),
         Some("version") => {
             println!("{}", include_str!("../../../VERSION").trim());
@@ -52,12 +66,17 @@ fn main() -> ExitCode {
     }
 }
 
-fn toggle_quick_settings() -> glib::ExitCode {
+fn toggle_popup(
+    action: &str,
+    application_id: &str,
+    install_style: fn(&gdk::Display),
+    toggle: fn(&gtk::Application),
+) -> glib::ExitCode {
     let panel_id = bar::APP_ID;
     if let Ok(bus) = gio::bus_get_sync(gio::BusType::Session, gio::Cancellable::NONE) {
         let path = format!("/{}", panel_id.replace('.', "/"));
         let parameters = (
-            quick_settings::ACTION,
+            action,
             Vec::<glib::Variant>::new(),
             HashMap::<String, glib::Variant>::new(),
         );
@@ -79,13 +98,13 @@ fn toggle_quick_settings() -> glib::ExitCode {
         }
     }
     let app = gtk::Application::builder()
-        .application_id("io.Astal.Palobar.RustQuickSettings")
+        .application_id(application_id)
         .build();
-    app.connect_startup(|_| {
+    app.connect_startup(move |_| {
         if let Some(display) = gdk::Display::default() {
-            quick_settings::install_style(&display);
+            install_style(&display);
         }
     });
-    app.connect_activate(quick_settings::toggle_first_monitor);
+    app.connect_activate(toggle);
     app.run_with_args::<&str>(&[])
 }

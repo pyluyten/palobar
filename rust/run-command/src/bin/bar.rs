@@ -1,7 +1,11 @@
 #[path = "../bar.rs"]
 mod bar;
+#[path = "../calendar.rs"]
+mod calendar;
 #[path = "../lockscreen.rs"]
 mod lockscreen;
+#[path = "../panel_popup.rs"]
+mod panel_popup;
 #[path = "../quick_settings.rs"]
 mod quick_settings;
 

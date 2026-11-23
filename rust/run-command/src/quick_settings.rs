@@ -1,6 +1,5 @@
 use gtk::prelude::*;
 use gtk::{gdk, gio, glib};
-use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -9,9 +8,10 @@ use std::time::Duration;
 
 pub const ACTION: &str = "toggle-quick-settings";
 const TITLE: &str = "Quick Settings";
+const CLASS: &str = "quick-settings-window";
 const SINK: &str = "@DEFAULT_AUDIO_SINK@";
 
-async fn command(args: &[&str]) -> Result<String, String> {
+pub(crate) async fn command(args: &[&str]) -> Result<String, String> {
     let argv: Vec<_> = args.iter().map(OsStr::new).collect();
     let launcher = gio::SubprocessLauncher::new(
         gio::SubprocessFlags::STDOUT_PIPE | gio::SubprocessFlags::STDERR_PIPE,
@@ -157,15 +157,13 @@ fn header(card: &gtk::Box, window: &gtk::ApplicationWindow) {
         "qs-circle-btn",
     );
     let weak_window = window.downgrade();
-    lock.connect_clicked(move |_| {
-        match crate::lockscreen::launch() {
-            Ok(()) => {
-                if let Some(window) = weak_window.upgrade() {
-                    window.close();
-                }
+    lock.connect_clicked(move |_| match crate::lockscreen::launch() {
+        Ok(()) => {
+            if let Some(window) = weak_window.upgrade() {
+                window.close();
             }
-            Err(error) => report(&error),
         }
+        Err(error) => report(&error),
     });
     row.append(&lock);
 
@@ -818,38 +816,14 @@ pub fn install_style(display: &gdk::Display) {
 }
 
 pub fn close(app: &gtk::Application) -> bool {
-    if let Some(window) = app
-        .windows()
-        .into_iter()
-        .find(|window| window.has_css_class("quick-settings-window"))
-    {
-        window.close();
-        true
-    } else {
-        false
-    }
+    crate::panel_popup::close(app, CLASS)
 }
 
 pub fn toggle(app: &gtk::Application, monitor: &gdk::Monitor, indicator: Option<&gtk::Button>) {
     if close(app) {
         return;
     }
-    let window = gtk::ApplicationWindow::builder()
-        .application(app)
-        .title(TITLE)
-        .build();
-    window.add_css_class("quick-settings-window");
-    window.init_layer_shell();
-    window.set_namespace(Some("quick-settings-popup"));
-    window.set_monitor(Some(monitor));
-    window.set_layer(Layer::Top);
-    window.set_exclusive_zone(0);
-    window.set_keyboard_mode(KeyboardMode::OnDemand);
-    for edge in [Edge::Top, Edge::Right, Edge::Bottom, Edge::Left] {
-        window.set_anchor(edge, true);
-    }
-
-    let area = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    crate::calendar::close(app);
     let card = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
         .spacing(14)
@@ -860,45 +834,19 @@ pub fn toggle(app: &gtk::Application, monitor: &gdk::Monitor, indicator: Option<
         .margin_end(10)
         .build();
     card.add_css_class("qs-card");
+    let window = crate::panel_popup::show_window(
+        app,
+        monitor,
+        TITLE,
+        "quick-settings-popup",
+        CLASS,
+        &card,
+        indicator,
+    );
     header(&card, &window);
     let audio = Audio::new(&card, app);
     let wifi = Wifi::new(&card, app);
     let dnd = quick_toggles(&card, app);
-    area.append(&card);
-    window.set_child(Some(&area));
-
-    let click = gtk::GestureClick::builder()
-        .button(gdk::BUTTON_PRIMARY)
-        .propagation_phase(gtk::PropagationPhase::Capture)
-        .build();
-    let weak_window = window.downgrade();
-    click.connect_pressed(move |gesture, _, x, y| {
-        let Some(area) = gesture.widget() else { return };
-        if area.pick(x, y, gtk::PickFlags::DEFAULT).as_ref() == Some(&area) {
-            gesture.set_state(gtk::EventSequenceState::Claimed);
-            if let Some(window) = weak_window.upgrade() {
-                window.close();
-            }
-        }
-    });
-    area.add_controller(click);
-    let keys = gtk::EventControllerKey::new();
-    keys.set_propagation_phase(gtk::PropagationPhase::Capture);
-    keys.connect_key_pressed(|keys, key, _, _| {
-        if key == gdk::Key::Escape {
-            if let Some(window) = keys.widget().and_downcast::<gtk::ApplicationWindow>() {
-                window.close();
-            }
-            return glib::Propagation::Stop;
-        }
-        glib::Propagation::Proceed
-    });
-    window.add_controller(keys);
-
-    let indicator = indicator.map(|button| {
-        button.add_css_class("open");
-        button.downgrade()
-    });
     let audio_refresh = glib::spawn_future_local(async move {
         loop {
             audio.refresh().await;
@@ -921,9 +869,6 @@ pub fn toggle(app: &gtk::Application, monitor: &gdk::Monitor, indicator: Option<
         audio_refresh.abort();
         wifi_refresh.abort();
         dnd_refresh.abort();
-        if let Some(button) = indicator.as_ref().and_then(glib::WeakRef::upgrade) {
-            button.remove_css_class("open");
-        }
     });
     glib::spawn_future_local(async {
         let _ = command(&["palobar-ctl", "close-popup"]).await;

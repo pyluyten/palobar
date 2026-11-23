@@ -1,4 +1,4 @@
-use crate::quick_settings;
+use crate::{calendar, quick_settings};
 use chrono::Local;
 use gtk::gdk;
 use gtk::prelude::*;
@@ -375,12 +375,11 @@ fn build_bar(
     clock_content.append(&date);
     clock.set_child(Some(&clock_content));
     let weak_app = app.downgrade();
+    let target_monitor = monitor.clone();
     clock.connect_clicked(move |button| {
         if let Some(app) = weak_app.upgrade() {
-            quick_settings::close(&app);
+            calendar::toggle(&app, &target_monitor, Some(button));
         }
-        let _ = run_ctl("toggle-calendar");
-        button.add_css_class("open");
     });
 
     let right = GtkBox::new(Orientation::Horizontal, 4);
@@ -414,6 +413,7 @@ fn build_bar(
     clipboard.connect_clicked(move |_| {
         if let Some(app) = weak_app.upgrade() {
             quick_settings::close(&app);
+            calendar::close(&app);
         }
     });
     right.append(&clipboard);
@@ -458,19 +458,15 @@ fn build_bar(
     });
 
     let badge_copy = badge.clone();
-    let clock_copy = clock.clone();
+    let weak_app = app.downgrade();
     let clipboard_copy = clipboard.clone();
     gtk::glib::timeout_add_local(Duration::from_secs(1), move || {
         if let Some(state) =
             run_ctl("get-bar-state").and_then(|text| serde_json::from_str::<BarState>(&text).ok())
         {
+            let calendar_open = weak_app.upgrade().is_some_and(|app| calendar::is_open(&app));
             badge_copy.set_text(&state.unread_count.to_string());
-            badge_copy.set_visible(state.unread_count > 0);
-            clock_copy.set_css_classes(if state.active_popup.as_deref() == Some("calendar") {
-                &["panel-button", "clock-button", "open"]
-            } else {
-                &["panel-button", "clock-button"]
-            });
+            badge_copy.set_visible(!calendar_open && state.unread_count > 0);
             clipboard_copy.set_css_classes(if state.active_popup.as_deref() == Some("clipboard") {
                 &["panel-button", "clipboard-button", "open"]
             } else {
@@ -500,6 +496,7 @@ pub fn run() -> gtk::glib::ExitCode {
 
     let app = Application::builder().application_id(APP_ID).build();
     quick_settings::register_panel_action(&app);
+    calendar::register_panel_action(&app);
     let state = workspaces.clone();
     app.connect_activate(move |app| {
         if !app.windows().is_empty() {
@@ -511,6 +508,7 @@ pub fn run() -> gtk::glib::ExitCode {
             return;
         };
         quick_settings::install_style(&display);
+        calendar::install_style(&display);
         let provider = style_provider();
         gtk::style_context_add_provider_for_display(
             &display,

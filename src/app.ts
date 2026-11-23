@@ -23,10 +23,10 @@ import {
 import { getAccentColor, subscribeAppearance } from "./services/appearance";
 import { lockScreen } from "./services/lockscreen";
 import { popups } from "./services/popups";
-import { unreadNotificationCount } from "./services/unread-notifications";
+import { markNotificationsRead, unreadNotificationCount } from "./services/unread-notifications";
 
 const rustCommand = GLib.getenv("PALOBAR_RUST_COMMAND");
-const rustRequests = new Set(["run-command", "toggle-dock", "toggle-quick-settings", "lock"]);
+const rustRequests = new Set(["run-command", "toggle-dock", "toggle-quick-settings", "toggle-calendar", "lock"]);
 
 app.start({
   css: style,
@@ -89,18 +89,45 @@ app.start({
       res(String(notifd.dontDisturb));
       return;
     }
+    if (cmd === "get-calendar-notifications") {
+      const notifd = AstalNotifd.get_default();
+      markNotificationsRead();
+      res(JSON.stringify({
+        dnd: notifd.dontDisturb,
+        notifications: notifd.notifications.map((notification) => ({
+          id: notification.id,
+          time: notification.time,
+          app_name: notification.appName ?? "",
+          desktop_entry: notification.desktopEntry ?? "",
+          app_icon: notification.appIcon ?? "",
+          summary: notification.summary ?? "",
+          body: notification.body ?? "",
+        })),
+      }));
+      return;
+    }
+    if (cmd === "dismiss-calendar-notification" || cmd === "clear-calendar-notifications") {
+      const notifications = AstalNotifd.get_default().notifications;
+      if (cmd === "clear-calendar-notifications") {
+        for (const notification of [...notifications]) notification.dismiss();
+      } else {
+        notifications.find((notification) => String(notification.id) === request[1])?.dismiss();
+      }
+      res("ok");
+      return;
+    }
     if (cmd === "get-active-popup") {
-      res(popups.active((active) => active) ?? "none");
+      res(popups.active.get() ?? "none");
       return;
     }
     if (cmd === "get-unread-count") {
-      res(unreadNotificationCount((count) => String(count)));
+      res(String(unreadNotificationCount.get()));
       return;
     }
     if (cmd === "get-bar-state") {
       res(JSON.stringify({
-        active_popup: popups.active((active) => active),
-        unread_count: unreadNotificationCount((count) => count),
+        active_popup: popups.active.get(),
+        unread_count: unreadNotificationCount.get(),
       }));
       return;
     }
@@ -161,8 +188,10 @@ app.start({
 
     const primary = monitors[0];
     if (primary) {
-      CalendarPopup(primary);
-      if (!rustCommand) QuickSettings(primary);
+      if (!rustCommand) {
+        CalendarPopup(primary);
+        QuickSettings(primary);
+      }
       WorkspaceDialog(primary);
       NotificationToasts(primary);
       ClipboardPopup(primary);
