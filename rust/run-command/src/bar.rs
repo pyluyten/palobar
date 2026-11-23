@@ -1,3 +1,4 @@
+use crate::quick_settings;
 use chrono::Local;
 use gtk::gdk;
 use gtk::prelude::*;
@@ -13,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-const APP_ID: &str = "io.Astal.Palobar.RustBar";
+pub const APP_ID: &str = "io.Astal.Palobar.RustBar";
 const PANEL_HEIGHT: i32 = 34;
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -263,20 +264,7 @@ fn volume_icon() -> &'static str {
     else {
         return "audio-volume-medium-symbolic";
     };
-    let text = String::from_utf8_lossy(&output.stdout);
-    if text.contains("[MUTED]") {
-        return "audio-volume-muted-symbolic";
-    }
-    let volume = text
-        .split_whitespace()
-        .nth(1)
-        .and_then(|value| value.parse::<f32>().ok())
-        .unwrap_or(0.5);
-    match volume {
-        value if value < 0.33 => "audio-volume-low-symbolic",
-        value if value < 0.67 => "audio-volume-medium-symbolic",
-        _ => "audio-volume-high-symbolic",
-    }
+    quick_settings::volume_icon(&String::from_utf8_lossy(&output.stdout))
 }
 
 fn style_provider() -> CssProvider {
@@ -372,7 +360,11 @@ fn build_bar(
     clock_content.append(&badge);
     clock_content.append(&date);
     clock.set_child(Some(&clock_content));
-    clock.connect_clicked(|button| {
+    let weak_app = app.downgrade();
+    clock.connect_clicked(move |button| {
+        if let Some(app) = weak_app.upgrade() {
+            quick_settings::close(&app);
+        }
         let _ = run_ctl("toggle-calendar");
         button.add_css_class("open");
     });
@@ -397,9 +389,18 @@ fn build_bar(
     indicators.append(&volume);
     indicators.append(&session);
     system_menu.set_child(Some(&indicators));
-    system_menu.connect_clicked(|button| {
-        let _ = run_ctl("toggle-quick-settings");
-        button.add_css_class("open");
+    let weak_app = app.downgrade();
+    let target_monitor = monitor.clone();
+    system_menu.connect_clicked(move |button| {
+        if let Some(app) = weak_app.upgrade() {
+            quick_settings::toggle(&app, &target_monitor, Some(button));
+        }
+    });
+    let weak_app = app.downgrade();
+    clipboard.connect_clicked(move |_| {
+        if let Some(app) = weak_app.upgrade() {
+            quick_settings::close(&app);
+        }
     });
     right.append(&clipboard);
     right.append(&system_menu);
@@ -445,7 +446,6 @@ fn build_bar(
     let badge_copy = badge.clone();
     let clock_copy = clock.clone();
     let clipboard_copy = clipboard.clone();
-    let system_menu_copy = system_menu.clone();
     gtk::glib::timeout_add_local(Duration::from_secs(1), move || {
         if let Some(state) =
             run_ctl("get-bar-state").and_then(|text| serde_json::from_str::<BarState>(&text).ok())
@@ -462,13 +462,6 @@ fn build_bar(
             } else {
                 &["panel-button", "clipboard-button"]
             });
-            system_menu_copy.set_css_classes(
-                if state.active_popup.as_deref() == Some("quick-settings") {
-                    &["panel-button", "system-menu-button", "open"]
-                } else {
-                    &["panel-button", "system-menu-button"]
-                },
-            );
         }
         gtk::glib::ControlFlow::Continue
     });
@@ -492,13 +485,18 @@ pub fn run() -> gtk::glib::ExitCode {
     start_workspace_event_stream(workspaces.clone());
 
     let app = Application::builder().application_id(APP_ID).build();
+    quick_settings::register_panel_action(&app);
     let state = workspaces.clone();
     app.connect_activate(move |app| {
+        if !app.windows().is_empty() {
+            return;
+        }
         let Some(display) = gdk::Display::default() else {
             eprintln!("[rust-bar] no GDK display available");
             app.quit();
             return;
         };
+        quick_settings::install_style(&display);
         let provider = style_provider();
         gtk::style_context_add_provider_for_display(
             &display,

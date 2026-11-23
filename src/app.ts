@@ -1,5 +1,6 @@
 import app from "ags/gtk4/app";
 import { Gdk, Gtk } from "ags/gtk4";
+import AstalNotifd from "gi://AstalNotifd";
 import style from "./styles/main.scss";
 import { Bar } from "./widgets/Bar";
 import { CalendarPopup } from "./widgets/CalendarPopup";
@@ -58,6 +59,19 @@ app.start({
     if (cmd === "toggle-quick-settings") {
       popups.toggle("quick-settings");
       res("ok");
+      return;
+    }
+    if (cmd === "close-popup") {
+      popups.close();
+      res("ok");
+      return;
+    }
+    if (cmd === "get-quick-settings-dnd" || cmd === "toggle-quick-settings-dnd") {
+      const notifd = AstalNotifd.get_default();
+      if (cmd === "toggle-quick-settings-dnd") {
+        notifd.dontDisturb = !notifd.dontDisturb;
+      }
+      res(String(notifd.dontDisturb));
       return;
     }
     if (cmd === "get-active-popup") {
