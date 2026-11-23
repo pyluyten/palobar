@@ -320,10 +320,10 @@ fn build_bar(
     window.set_monitor(Some(monitor));
     window.set_layer(Layer::Top);
     window.set_keyboard_mode(KeyboardMode::None);
-    window.set_exclusive_zone(0);
     window.set_anchor(Edge::Top, true);
     window.set_anchor(Edge::Left, true);
     window.set_anchor(Edge::Right, true);
+    window.auto_exclusive_zone_enable();
 
     let left = GtkBox::new(Orientation::Horizontal, 8);
     left.add_css_class("panel-left");
