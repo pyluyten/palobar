@@ -9,6 +9,7 @@ use gtk::{
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use serde::Deserialize;
 use std::io::{BufRead, BufReader};
+use std::os::unix::process::CommandExt;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -95,16 +96,29 @@ fn publish_workspaces(state: &Arc<Mutex<Vec<Workspace>>>, workspaces: Vec<Worksp
 
 fn start_workspace_event_stream(state: Arc<Mutex<Vec<Workspace>>>) {
     thread::spawn(move || loop {
-        let child = Command::new("niri")
+        let parent = std::process::id() as libc::pid_t;
+        let mut stream = Command::new("niri");
+        stream
             .args(["msg", "-j", "event-stream"])
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn();
+            .stderr(Stdio::null());
+        // Keep the event-stream child tied to this panel when a session is stopped.
+        unsafe {
+            stream.pre_exec(move || {
+                if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM, 0, 0, 0) == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                if libc::getppid() != parent {
+                    return Err(std::io::Error::from_raw_os_error(libc::ESRCH));
+                }
+                Ok(())
+            });
+        }
 
-        if let Ok(mut child) = child {
+        if let Ok(mut child) = stream.spawn() {
             if let Some(stdout) = child.stdout.take() {
                 let mut workspaces = state.lock().map(|list| list.clone()).unwrap_or_default();
-                for line in BufReader::new(stdout).lines().flatten() {
+                for line in BufReader::new(stdout).lines().map_while(Result::ok) {
                     let Ok(event) = serde_json::from_str::<serde_json::Value>(&line) else {
                         continue;
                     };

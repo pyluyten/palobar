@@ -1,5 +1,7 @@
 import app from "ags/gtk4/app";
 import { Gdk, Gtk } from "ags/gtk4";
+import Gio from "gi://Gio";
+import GLib from "gi://GLib";
 import AstalNotifd from "gi://AstalNotifd";
 import style from "./styles/main.scss";
 import { Bar } from "./widgets/Bar";
@@ -23,10 +25,23 @@ import { lockScreen } from "./services/lockscreen";
 import { popups } from "./services/popups";
 import { unreadNotificationCount } from "./services/unread-notifications";
 
+const rustCommand = GLib.getenv("PALOBAR_RUST_COMMAND");
+const rustRequests = new Set(["run-command", "toggle-dock", "toggle-quick-settings", "lock"]);
+
 app.start({
   css: style,
   requestHandler(request, res) {
     const cmd = request[0];
+    if (rustCommand && rustRequests.has(cmd)) {
+      try {
+        Gio.Subprocess.new([rustCommand, cmd], Gio.SubprocessFlags.NONE);
+        res("ok");
+      } catch (error) {
+        console.error(`[palobar] Could not start Rust command ${cmd}:`, error);
+        res(`Could not start ${cmd}`);
+      }
+      return;
+    }
     if (cmd === "toggle-launcher" || cmd === "launcher") {
       toggleLauncher();
       res("ok");
@@ -140,12 +155,14 @@ app.start({
     initOverviewCapture();
 
     const monitors = app.get_monitors();
-    monitors.forEach((monitor, index) => Bar(monitor, index));
+    if (!rustCommand) {
+      monitors.forEach((monitor, index) => Bar(monitor, index));
+    }
 
     const primary = monitors[0];
     if (primary) {
       CalendarPopup(primary);
-      QuickSettings(primary);
+      if (!rustCommand) QuickSettings(primary);
       WorkspaceDialog(primary);
       NotificationToasts(primary);
       ClipboardPopup(primary);

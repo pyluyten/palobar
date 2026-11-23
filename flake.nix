@@ -137,8 +137,111 @@
         runHook postInstall
       '';
     };
+    palobarRust = pkgs.rustPlatform.buildRustPackage {
+      pname = "palobar-rust";
+      inherit (palobar) version;
+      src = pkgs.lib.fileset.toSource {
+        root = ./.;
+        fileset = pkgs.lib.fileset.unions [
+          ./VERSION
+          ./rust/run-command/Cargo.toml
+          ./rust/run-command/Cargo.lock
+          ./rust/run-command/src
+        ];
+      };
+      cargoRoot = "rust/run-command";
+      buildAndTestSubdir = "rust/run-command";
+      cargoLock.lockFile = ./rust/run-command/Cargo.lock;
+      cargoBuildFlags = ["--bin" "palobar-run-command-rs"];
+
+      nativeBuildInputs = [pkgs.pkg-config pkgs.wrapGAppsHook4];
+      buildInputs = [pkgs.gtk4 pkgs.gtk4-layer-shell pkgs.gsettings-desktop-schemas];
+
+      preFixup = ''
+        gappsWrapperArgs+=(
+          --prefix PATH : "${palobar}/bin"
+          --suffix PATH : "${pkgs.lib.makeBinPath [pkgs.niri pkgs.networkmanager pkgs.wireplumber pkgs.systemd pkgs.coreutils]}"
+          --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath [pkgs.pam]}"
+        )
+      '';
+
+      postInstall = ''
+        mv "$out/bin/palobar-run-command-rs" "$out/bin/palobar-rust"
+        cat > "$out/bin/palobar-rust-session" <<'EOF'
+        #!@bash@
+        set -eu
+
+        backend=
+        panel=
+        backend_ready=false
+
+        backend_status() {
+            @timeout@ 1 @palobarCtl@ get-bar-state >/dev/null 2>&1
+        }
+
+        cleanup() {
+            if [[ -n "$panel" ]]; then
+                kill "$panel" 2>/dev/null || true
+                wait "$panel" 2>/dev/null || true
+            fi
+            if [[ -n "$backend" ]]; then
+                if "$backend_ready" && kill -0 "$backend" 2>/dev/null; then
+                    @timeout@ 2 @palobarCtl@ quit >/dev/null 2>&1 || true
+                fi
+                kill "$backend" 2>/dev/null || true
+                wait "$backend" 2>/dev/null || true
+            fi
+        }
+
+        if backend_status; then
+            printf '%s\n' 'Palobar is already running. Stop it with palobar-ctl quit before starting the Rust session.' >&2
+            exit 1
+        fi
+
+        trap cleanup EXIT
+        trap 'exit 130' INT
+        trap 'exit 143' TERM
+
+        PALOBAR_RUST_COMMAND=@palobarRust@ @palobar@ &
+        backend=$!
+
+        for ((attempt = 0; attempt < 50; attempt++)); do
+            if ! kill -0 "$backend" 2>/dev/null; then
+                break
+            fi
+            if backend_status; then
+                backend_ready=true
+                break
+            fi
+            @sleep@ 0.1
+        done
+
+        if ! "$backend_ready"; then
+            printf '%s\n' 'The Palobar backend failed to start.' >&2
+            exit 1
+        fi
+
+        @palobarRust@ run-panel &
+        panel=$!
+        wait -n "$backend" "$panel"
+        EOF
+        chmod +x "$out/bin/palobar-rust-session"
+        substituteInPlace "$out/bin/palobar-rust-session" \
+          --replace-fail '@bash@' '${pkgs.bash}/bin/bash' \
+          --replace-fail '@timeout@' '${pkgs.coreutils}/bin/timeout' \
+          --replace-fail '@sleep@' '${pkgs.coreutils}/bin/sleep' \
+          --replace-fail '@palobar@' '${palobar}/bin/palobar' \
+          --replace-fail '@palobarCtl@' '${palobar}/bin/palobar-ctl' \
+          --replace-fail '@palobarRust@' "$out/bin/palobar-rust"
+      '';
+
+      meta.mainProgram = "palobar-rust";
+    };
   in {
-    packages.${system}.default = palobar;
+    packages.${system} = {
+      default = palobar;
+      palobar-rust = palobarRust;
+    };
 
     devShells.${system} = {
       rust = pkgs.mkShell {
