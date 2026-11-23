@@ -164,9 +164,14 @@ function showLauncher(
         label,
         application: null as AstalApps.Application | null,
       };
-      trackSignal(drag, drag.connect("prepare", () =>
-        slot.application ? Gdk.ContentProvider.new_for_value(slot.application) : null,
-      ));
+      trackSignal(drag, drag.connect("prepare", () => {
+        const application = slot.application;
+        if (!application) return null;
+        return Gdk.ContentProvider.new_union([
+          Gdk.ContentProvider.new_for_value(application),
+          Gdk.ContentProvider.new_for_value(application.entry),
+        ]);
+      }));
       trackSignal(drag, drag.connect("drag-begin", () => {
         drag.set_icon(new Gtk.WidgetPaintable({ widget: icon }), 27, 27);
       }));
