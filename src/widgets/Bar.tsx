@@ -45,6 +45,17 @@ function WorkspaceSwitcher({ monitor }: { monitor: Gdk.Monitor }) {
           displayWorkspaces(monitor);
         });
         self.add_controller(click);
+
+        const scroll = new Gtk.EventControllerScroll({
+          flags: Gtk.EventControllerScrollFlags.VERTICAL |
+            Gtk.EventControllerScrollFlags.DISCRETE,
+        });
+        scroll.connect("scroll", (_controller, _dx, dy) => {
+          if (dy === 0) return false;
+          void niri.sendAction(dy < 0 ? "focus-workspace-up" : "focus-workspace-down");
+          return true;
+        });
+        self.add_controller(scroll);
       }}
     >
       <For each={workspaces}>
