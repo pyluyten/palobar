@@ -19,6 +19,8 @@ import {
 } from "./services/clipboard";
 import { getAccentColor, subscribeAppearance } from "./services/appearance";
 import { lockScreen } from "./services/lockscreen";
+import { popups } from "./services/popups";
+import { unreadNotificationCount } from "./services/unread-notifications";
 
 app.start({
   css: style,
@@ -35,8 +37,42 @@ app.start({
       return;
     }
     if (cmd === "display-workspaces") {
-      displayWorkspaces();
+      const monitorIndex = Number(request[1]);
+      const monitor = Number.isInteger(monitorIndex)
+        ? app.get_monitors()[monitorIndex]
+        : undefined;
+      displayWorkspaces(monitor);
       res("ok");
+      return;
+    }
+    if (cmd === "toggle-calendar") {
+      popups.toggle("calendar");
+      res("ok");
+      return;
+    }
+    if (cmd === "toggle-clipboard") {
+      popups.toggle("clipboard");
+      res("ok");
+      return;
+    }
+    if (cmd === "toggle-quick-settings") {
+      popups.toggle("quick-settings");
+      res("ok");
+      return;
+    }
+    if (cmd === "get-active-popup") {
+      res(popups.active((active) => active) ?? "none");
+      return;
+    }
+    if (cmd === "get-unread-count") {
+      res(unreadNotificationCount((count) => String(count)));
+      return;
+    }
+    if (cmd === "get-bar-state") {
+      res(JSON.stringify({
+        active_popup: popups.active((active) => active),
+        unread_count: unreadNotificationCount((count) => count),
+      }));
       return;
     }
     if (cmd === "run-command") {
