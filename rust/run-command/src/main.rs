@@ -1,6 +1,7 @@
 mod bar;
 mod dock;
 mod history;
+mod lockscreen;
 mod quick_settings;
 mod run_command;
 
@@ -9,13 +10,14 @@ use gtk::prelude::*;
 use gtk::{gdk, gio, glib};
 use std::collections::HashMap;
 
-const HELP: &str = "Usage: palobar-run-command-rs <run-command | run-panel | toggle-dock | toggle-quick-settings | version>
+const HELP: &str = "Usage: palobar-run-command-rs <run-command | run-panel | toggle-dock | toggle-quick-settings | lock | version>
 
 Commands
   run-command            Open the command launcher
   run-panel              Open the panel
   toggle-dock            Toggle the standalone dock
   toggle-quick-settings  Toggle Quick Settings
+  lock                   Lock the Wayland session
   version                Print the Palobar version";
 
 fn main() -> ExitCode {
@@ -34,6 +36,7 @@ fn main() -> ExitCode {
         Some("run-panel") => bar::run(),
         Some("toggle-dock") => dock::run(),
         Some(quick_settings::ACTION) => toggle_quick_settings(),
+        Some("lock") => lockscreen::run(),
         Some("version") => {
             println!("{}", include_str!("../../../VERSION").trim());
             ExitCode::SUCCESS

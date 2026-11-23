@@ -140,20 +140,37 @@
   in {
     packages.${system}.default = palobar;
 
-    devShells.${system}.default = pkgs.mkShell {
-      PALOBAR_GTKSOURCE_LANGUAGE_DIR = "${self}";
-      PALOBAR_VERSION_FILE = "${self}/VERSION";
-      packages = [
-        agsWithDeps
-        pkgs.nodejs
-        pkgs.typescript
-        pkgs.gtksourceview5
-        pkgs.dart-sass
-        pkgs.swaybg
-        pkgs.swayidle
-        pkgs.wl-clipboard
-        pkgs.cliphist
-      ];
+    devShells.${system} = {
+      rust = pkgs.mkShell {
+        packages = [
+          pkgs.cargo
+          pkgs.rustc
+          pkgs.rustfmt
+          pkgs.pkg-config
+          pkgs.gtk4
+          pkgs.gtk4-layer-shell
+          pkgs.gsettings-desktop-schemas
+        ];
+        shellHook = ''
+          export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath [pkgs.pam]}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+        '';
+      };
+
+      default = pkgs.mkShell {
+        PALOBAR_GTKSOURCE_LANGUAGE_DIR = "${self}";
+        PALOBAR_VERSION_FILE = "${self}/VERSION";
+        packages = [
+          agsWithDeps
+          pkgs.nodejs
+          pkgs.typescript
+          pkgs.gtksourceview5
+          pkgs.dart-sass
+          pkgs.swaybg
+          pkgs.swayidle
+          pkgs.wl-clipboard
+          pkgs.cliphist
+        ];
+      };
     };
   };
 }

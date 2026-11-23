@@ -80,14 +80,6 @@ fn labeled_button(icon: &str, label: &str, class: &str) -> (gtk::Button, gtk::Im
     (button, image)
 }
 
-async fn run_session_action(args: &[&str]) -> Result<(), String> {
-    let output = command(args).await?;
-    if args == ["palobar-ctl", "lock"] && output.trim() != "ok" {
-        return Err(output);
-    }
-    Ok(())
-}
-
 fn session_button(
     button: &gtk::Button,
     window: &gtk::ApplicationWindow,
@@ -116,7 +108,7 @@ fn session_button(
             if screenshot {
                 glib::timeout_future(Duration::from_millis(150)).await;
             }
-            if let Err(error) = run_session_action(&args).await {
+            if let Err(error) = command(&args).await {
                 report(&error);
             }
             drop(hold);
@@ -164,7 +156,17 @@ fn header(card: &gtk::Box, window: &gtk::ApplicationWindow) {
         "Lock Screen",
         "qs-circle-btn",
     );
-    session_button(&lock, window, vec!["palobar-ctl", "lock"], false);
+    let weak_window = window.downgrade();
+    lock.connect_clicked(move |_| {
+        match crate::lockscreen::launch() {
+            Ok(()) => {
+                if let Some(window) = weak_window.upgrade() {
+                    window.close();
+                }
+            }
+            Err(error) => report(&error),
+        }
+    });
     row.append(&lock);
 
     let power = icon_button("system-shutdown-symbolic", "Power Options", "qs-circle-btn");
