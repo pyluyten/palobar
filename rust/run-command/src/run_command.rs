@@ -1,5 +1,5 @@
 use crate::history;
-use gtk::gdk;
+use gtk::{gdk, gio, glib};
 use gtk::prelude::*;
 use gtk::{
     Application, ApplicationWindow, Box as GtkBox, CssProvider, Entry, EntryIconPosition,
@@ -11,48 +11,39 @@ use std::collections::HashSet;
 use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
 use std::rc::Rc;
-use std::thread;
 
 const APP_ID: &str = "io.Astal.Palobar.RunCommandRust";
 
-fn spawn_command(command: &str, in_terminal: bool) {
-    let command_text = command.trim();
-    if command_text.is_empty() {
-        return;
-    }
-
-    let command_text = command_text.to_string();
-    thread::spawn(move || {
-        let terminal = if in_terminal { find_terminal() } else { None };
-        let terminal_launched = terminal.is_some();
-        let result = if let Some((binary, flag)) = terminal {
-            let mut niri = Command::new("niri");
-            niri.args(["msg", "action", "spawn", "--"]);
-            niri.arg(binary);
-            if let Some(flag) = flag {
-                niri.arg(flag);
-            }
-            niri.args(["sh", "-c", &command_text]);
-            niri.output()
-        } else {
-            Command::new("niri")
-                .args(["msg", "action", "spawn-sh", "--", &command_text])
-                .output()
-        };
-
-        match result {
-            Ok(output) if output.status.success() => {
-                history::record_run(&command_text, terminal_launched);
-            }
-            Ok(output) => eprintln!(
-                "[run-command-rs] niri rejected command: {}",
-                String::from_utf8_lossy(&output.stderr).trim()
-            ),
-            Err(error) => {
-                eprintln!("[run-command-rs] failed to ask niri to spawn command: {error}")
-            }
+fn spawn_command(command_text: String, in_terminal: bool) {
+    let terminal = if in_terminal { find_terminal() } else { None };
+    let terminal_launched = terminal.is_some();
+    let result = if let Some((binary, flag)) = terminal {
+        let mut niri = Command::new("niri");
+        niri.args(["msg", "action", "spawn", "--"]);
+        niri.arg(binary);
+        if let Some(flag) = flag {
+            niri.arg(flag);
         }
-    });
+        niri.args(["sh", "-c", &command_text]);
+        niri.output()
+    } else {
+        Command::new("niri")
+            .args(["msg", "action", "spawn-sh", "--", &command_text])
+            .output()
+    };
+
+    match result {
+        Ok(output) if output.status.success() => {
+            history::record_run(&command_text, terminal_launched);
+        }
+        Ok(output) => eprintln!(
+            "[run-command-rs] niri rejected command: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ),
+        Err(error) => {
+            eprintln!("[run-command-rs] failed to ask niri to spawn command: {error}")
+        }
+    }
 }
 
 fn find_terminal() -> Option<(String, Option<&'static str>)> {
@@ -266,10 +257,24 @@ fn navigate_history(
 }
 
 fn submit_command(command: &str, in_terminal: bool, window: &ApplicationWindow) {
-    if command.trim().is_empty() {
+    let command = command.trim();
+    if command.is_empty() {
         return;
     }
-    spawn_command(command, in_terminal);
+    let Some(app) = window.application() else {
+        return;
+    };
+    let hold = app.hold();
+    let command = command.to_owned();
+    glib::spawn_future_local(async move {
+        if gio::spawn_blocking(move || spawn_command(command, in_terminal))
+            .await
+            .is_err()
+        {
+            eprintln!("[run-command-rs] command worker panicked");
+        }
+        drop(hold);
+    });
     window.close();
 }
 
@@ -399,7 +404,9 @@ fn build_window(app: &Application) {
                 return gtk::glib::Propagation::Stop;
             }
         }
-        if key == gdk::Key::Up
+        let up = matches!(key, gdk::Key::Up | gdk::Key::KP_Up);
+        let down = matches!(key, gdk::Key::Down | gdk::Key::KP_Down);
+        if up
             && navigate_history(
                 1,
                 &key_entry,
@@ -411,7 +418,7 @@ fn build_window(app: &Application) {
         {
             return gtk::glib::Propagation::Stop;
         }
-        if key == gdk::Key::Down
+        if down
             && navigate_history(
                 -1,
                 &key_entry,
@@ -423,13 +430,13 @@ fn build_window(app: &Application) {
         {
             return gtk::glib::Propagation::Stop;
         }
-        if key == gdk::Key::Down || key == gdk::Key::Up {
+        if up || down {
             let mut current = key_state.borrow_mut();
             if current.matches.is_empty() {
                 return gtk::glib::Propagation::Proceed;
             }
             let count = current.matches.len();
-            current.selected_index = if key == gdk::Key::Down {
+            current.selected_index = if down {
                 (current.selected_index + 1) % count
             } else {
                 (current.selected_index + count - 1) % count
