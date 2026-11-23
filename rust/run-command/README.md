@@ -1,8 +1,8 @@
 # Rust run-command prototype
 
-This isolated prototype replaces the AGS/Astal window for the standalone run-command component with GTK4 and gtk4-layer-shell. It currently supports command submission through Niri, Ctrl+Enter terminal launch, and Escape to close.
+This standalone GTK4 and gtk4-layer-shell implementation ports the run-command prompt from AGS. It supports executable completion, Tab completion, prefix-filtered command history with Up/Down navigation, terminal-mode history, Ctrl+Enter terminal launch, backdrop dismissal, and Escape to close. History is stored in `$XDG_STATE_HOME/palobar/run-command-history.json` (or `~/.local/state/palobar/run-command-history.json`) and is limited to 500 entries.
 
-It is a technical spike, not a drop-in replacement yet. History, executable completion, appearance tracking, backdrop dismissal, and integration with the running Palobar process still need to be ported before replacing the existing component.
+The prompt runs as a standalone prototype and asks Niri to launch commands. It does not yet integrate with the running Palobar process.
 
 Build and launch it from a Niri session with:
 
