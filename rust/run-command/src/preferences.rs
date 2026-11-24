@@ -1,3 +1,5 @@
+#[path = "preferences/power.rs"]
+mod power;
 #[path = "preferences/sound.rs"]
 mod sound;
 
@@ -574,9 +576,11 @@ fn build(app: &gtk::Application) {
         .build();
     stack.add_titled(&scroll, Some("output"), "Output");
     stack.add_titled(&sound::build(app), Some("sound"), "Sound");
+    stack.add_titled(&power::build(), Some("power"), "Power");
     let pages = [
         ("output", "Output", "video-display-symbolic"),
         ("sound", "Sound", "multimedia-volume-control-symbolic"),
+        ("power", "Power", "battery-good-symbolic"),
     ];
     for (_, title, icon) in pages {
         let item = gtk::Box::new(gtk::Orientation::Horizontal, 10);

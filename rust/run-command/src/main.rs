@@ -1,6 +1,7 @@
 mod bar;
 mod calendar;
 mod clipboard;
+mod config;
 mod dock;
 mod history;
 mod launcher;

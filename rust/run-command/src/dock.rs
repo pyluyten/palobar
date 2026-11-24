@@ -1,3 +1,4 @@
+use crate::config::{read_config, update_config};
 use gtk::prelude::*;
 use gtk::{gdk, gio, glib};
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
@@ -69,22 +70,6 @@ fn desktop_app(name: &str, installed: &[gio::DesktopAppInfo]) -> Option<gio::Des
         .cloned()
 }
 
-fn read_config(
-    file: &gio::File,
-) -> Result<(Value, Option<glib::GString>), Box<dyn std::error::Error>> {
-    match file.load_contents(gio::Cancellable::NONE) {
-        Ok((bytes, tag)) => {
-            let config: Value = serde_json::from_slice(&bytes)?;
-            if !config.is_object() {
-                return Err("Palobar configuration must be a JSON object".into());
-            }
-            Ok((config, tag))
-        }
-        Err(error) if error.matches(gio::IOErrorEnum::NotFound) => Ok((json!({}), None)),
-        Err(error) => Err(error.into()),
-    }
-}
-
 fn favorites(config: &Value) -> Vec<String> {
     let mut seen = HashSet::new();
     config
@@ -99,12 +84,11 @@ fn favorites(config: &Value) -> Vec<String> {
 }
 
 fn set_favorite(file: &gio::File, id: &str, add: bool) -> Result<(), Box<dyn std::error::Error>> {
-    for _ in 0..3 {
-        let (mut config, tag) = read_config(file)?;
-        let mut ids = favorites(&config);
+    update_config(file, |config| {
+        let mut ids = favorites(config);
         let exists = ids.iter().any(|favorite| favorite == id);
         if exists == add {
-            return Ok(());
+            return Ok(false);
         }
         if add {
             ids.push(id.to_owned());
@@ -112,20 +96,8 @@ fn set_favorite(file: &gio::File, id: &str, add: bool) -> Result<(), Box<dyn std
             ids.retain(|favorite| favorite != id);
         }
         config["favoriteApps"] = json!(ids);
-        let bytes = serde_json::to_vec_pretty(&config)?;
-        match file.replace_contents(
-            &bytes,
-            tag.as_deref(),
-            false,
-            gio::FileCreateFlags::NONE,
-            gio::Cancellable::NONE,
-        ) {
-            Ok(_) => return Ok(()),
-            Err(error) if error.matches(gio::IOErrorEnum::WrongEtag) => continue,
-            Err(error) => return Err(error.into()),
-        }
-    }
-    Err("Palobar configuration changed repeatedly while saving".into())
+        Ok(true)
+    })
 }
 
 fn report(error: impl std::fmt::Display) {

@@ -4,6 +4,8 @@ mod bar;
 mod calendar;
 #[path = "../clipboard.rs"]
 mod clipboard;
+#[path = "../config.rs"]
+mod config;
 #[path = "../dock.rs"]
 mod dock;
 #[path = "../launcher.rs"]
