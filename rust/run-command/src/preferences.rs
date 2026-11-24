@@ -1,3 +1,5 @@
+#[path = "preferences/multitask.rs"]
+mod multitask;
 #[path = "preferences/power.rs"]
 mod power;
 #[path = "preferences/sound.rs"]
@@ -577,10 +579,12 @@ fn build(app: &gtk::Application) {
     stack.add_titled(&scroll, Some("output"), "Output");
     stack.add_titled(&sound::build(app), Some("sound"), "Sound");
     stack.add_titled(&power::build(), Some("power"), "Power");
+    stack.add_titled(&multitask::build(&window), Some("multitask"), "Multitask");
     let pages = [
         ("output", "Output", "video-display-symbolic"),
         ("sound", "Sound", "multimedia-volume-control-symbolic"),
         ("power", "Power", "battery-good-symbolic"),
+        ("multitask", "Multitask", "view-grid-symbolic"),
     ];
     for (_, title, icon) in pages {
         let item = gtk::Box::new(gtk::Orientation::Horizontal, 10);

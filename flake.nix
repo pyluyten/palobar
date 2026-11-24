@@ -155,11 +155,12 @@
       cargoBuildFlags = ["--bin" "palobar-run-command-rs"];
 
       nativeBuildInputs = [pkgs.pkg-config pkgs.wrapGAppsHook4];
-      buildInputs = [pkgs.gtk4 pkgs.gtk4-layer-shell pkgs.gsettings-desktop-schemas];
+      buildInputs = [pkgs.gtk4 pkgs.gtk4-layer-shell pkgs.gtksourceview5 pkgs.gsettings-desktop-schemas];
 
       preFixup = ''
         gappsWrapperArgs+=(
           --prefix PATH : "${palobar}/bin"
+          --set PALOBAR_GTKSOURCE_LANGUAGE_DIR "${palobar}/share/palobar/language-specs"
           --suffix PATH : "${pkgs.lib.makeBinPath [pkgs.niri pkgs.networkmanager pkgs.wireplumber pkgs.systemd pkgs.coreutils pkgs.wl-clipboard pkgs.cliphist]}"
           --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath [pkgs.pam]}"
         )
@@ -252,6 +253,7 @@
           pkgs.pkg-config
           pkgs.gtk4
           pkgs.gtk4-layer-shell
+          pkgs.gtksourceview5
           pkgs.gsettings-desktop-schemas
         ];
         shellHook = ''
