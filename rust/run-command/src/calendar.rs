@@ -73,6 +73,7 @@ pub fn toggle(app: &gtk::Application, monitor: &gdk::Monitor, indicator: Option<
         return;
     }
     crate::quick_settings::close(app);
+    crate::clipboard::close(app);
     let card = gtk::Box::builder()
         .orientation(gtk::Orientation::Horizontal)
         .spacing(18)

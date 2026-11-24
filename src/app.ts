@@ -26,7 +26,7 @@ import { popups } from "./services/popups";
 import { initUnreadNotifications, markNotificationsRead, unreadNotificationCount } from "./services/unread-notifications";
 
 const rustCommand = GLib.getenv("PALOBAR_RUST_COMMAND");
-const rustRequests = new Set(["run-command", "toggle-dock", "toggle-launcher", "toggle-quick-settings", "toggle-calendar", "lock"]);
+const rustRequests = new Set(["run-command", "toggle-dock", "toggle-launcher", "toggle-quick-settings", "toggle-calendar", "toggle-clipboard", "lock"]);
 
 app.start({
   css: style,
@@ -192,8 +192,10 @@ app.start({
 
     initWallpaperService();
     initPowerService();
-    initClipboardService();
-    if (!rustCommand) initOverviewCapture();
+    if (!rustCommand) {
+      initClipboardService();
+      initOverviewCapture();
+    }
 
     const monitors = app.get_monitors();
     if (!rustCommand) {
@@ -207,9 +209,9 @@ app.start({
         CalendarPopup(primary);
         QuickSettings(primary);
         NotificationToasts(primary);
+        ClipboardPopup(primary);
       }
       WorkspaceDialog(primary);
-      ClipboardPopup(primary);
     }
   },
 });

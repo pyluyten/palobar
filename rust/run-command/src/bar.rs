@@ -1,4 +1,4 @@
-use crate::{calendar, launcher, notifications, overview, quick_settings};
+use crate::{calendar, clipboard, launcher, notifications, overview, quick_settings};
 use chrono::Local;
 use gtk::gdk;
 use gtk::prelude::*;
@@ -30,14 +30,6 @@ struct Workspace {
     is_focused: bool,
     #[serde(default)]
     is_urgent: bool,
-}
-
-fn run_ctl(request: &str) -> Option<String> {
-    let output = Command::new("palobar-ctl").arg(request).output().ok()?;
-    output
-        .status
-        .success()
-        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
 fn open_workspace_dialog(monitor_index: u32) {
@@ -208,21 +200,6 @@ fn format_date() -> String {
     )
 }
 
-fn image_button(icon: &str, tooltip: &str, class: &str, request: &str) -> Button {
-    let button = Button::new();
-    button.add_css_class("panel-button");
-    button.add_css_class(class);
-    button.set_tooltip_text(Some(tooltip));
-    let image = Image::from_icon_name(icon);
-    image.set_pixel_size(15);
-    button.set_child(Some(&image));
-    let request = request.to_string();
-    button.connect_clicked(move |_| {
-        let _ = run_ctl(&request);
-    });
-    button
-}
-
 fn system_indicator_image(icon: &str) -> Image {
     let image = Image::from_icon_name(icon);
     image.set_pixel_size(15);
@@ -390,12 +367,12 @@ fn build_bar(
 
     let right = GtkBox::new(Orientation::Horizontal, 4);
     right.add_css_class("panel-right");
-    let clipboard = image_button(
-        "edit-paste-symbolic",
-        "Clipboard History",
-        "clipboard-button",
-        "toggle-clipboard",
-    );
+    let clipboard = Button::builder()
+        .tooltip_text("Clipboard History")
+        .child(&system_indicator_image("edit-paste-symbolic"))
+        .build();
+    clipboard.add_css_class("panel-button");
+    clipboard.add_css_class("clipboard-button");
     let system_menu = Button::new();
     system_menu.add_css_class("panel-button");
     system_menu.add_css_class("system-menu-button");
@@ -416,10 +393,10 @@ fn build_bar(
         }
     });
     let weak_app = app.downgrade();
-    clipboard.connect_clicked(move |_| {
+    let target_monitor = monitor.clone();
+    clipboard.connect_clicked(move |button| {
         if let Some(app) = weak_app.upgrade() {
-            quick_settings::close(&app);
-            calendar::close(&app);
+            clipboard::toggle(&app, &target_monitor, Some(button));
         }
     });
     right.append(&clipboard);
@@ -463,17 +440,6 @@ fn build_bar(
         gtk::glib::ControlFlow::Continue
     });
 
-    let clipboard_copy = clipboard.clone();
-    gtk::glib::timeout_add_local(Duration::from_secs(1), move || {
-        let clipboard_open = run_ctl("get-active-popup").as_deref() == Some("clipboard");
-        clipboard_copy.set_css_classes(if clipboard_open {
-            &["panel-button", "clipboard-button", "open"]
-        } else {
-            &["panel-button", "clipboard-button"]
-        });
-        gtk::glib::ControlFlow::Continue
-    });
-
     let keys = EventControllerKey::new();
     let window_copy = window.clone();
     keys.connect_key_pressed(move |_, key, _, _| {
@@ -496,12 +462,14 @@ pub fn run() -> gtk::glib::ExitCode {
     let app = Application::builder().application_id(APP_ID).build();
     quick_settings::register_panel_action(&app);
     calendar::register_panel_action(&app);
+    clipboard::register_panel_action(&app);
     launcher::register_panel_action(&app);
     let close_popups = gtk::gio::SimpleAction::new("close-popups", None);
     let weak_app = app.downgrade();
     close_popups.connect_activate(move |_, _| {
         if let Some(app) = weak_app.upgrade() {
             calendar::close(&app);
+            clipboard::close(&app);
             quick_settings::close(&app);
         }
     });
@@ -518,6 +486,8 @@ pub fn run() -> gtk::glib::ExitCode {
         };
         quick_settings::install_style(&display);
         calendar::install_style(&display);
+        clipboard::install_style(&display);
+        clipboard::start_watcher(app);
         launcher::install_style(&display);
         overview::install(app, &display, overview_open.clone());
         let provider = style_provider();

@@ -160,7 +160,7 @@
       preFixup = ''
         gappsWrapperArgs+=(
           --prefix PATH : "${palobar}/bin"
-          --suffix PATH : "${pkgs.lib.makeBinPath [pkgs.niri pkgs.networkmanager pkgs.wireplumber pkgs.systemd pkgs.coreutils]}"
+          --suffix PATH : "${pkgs.lib.makeBinPath [pkgs.niri pkgs.networkmanager pkgs.wireplumber pkgs.systemd pkgs.coreutils pkgs.wl-clipboard pkgs.cliphist]}"
           --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath [pkgs.pam]}"
         )
       '';

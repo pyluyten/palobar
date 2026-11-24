@@ -1,4 +1,4 @@
-use crate::{bar, calendar, dock, launcher, quick_settings};
+use crate::{bar, calendar, clipboard, dock, launcher, quick_settings};
 use gtk::prelude::*;
 use gtk::{cairo, gdk, glib};
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
@@ -175,6 +175,7 @@ pub fn install(app: &gtk::Application, display: &gdk::Display, open: Arc<AtomicB
         let show = overview_open
             && launcher::window(&app).is_none()
             && !calendar::is_open(&app)
+            && !clipboard::is_open(&app)
             && !quick_settings::is_open(&app);
         captures.retain(|(monitor, window)| {
             let Some(window) = window.upgrade() else {

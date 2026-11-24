@@ -1,5 +1,6 @@
 mod bar;
 mod calendar;
+mod clipboard;
 mod dock;
 mod history;
 mod launcher;
@@ -15,7 +16,7 @@ use gtk::prelude::*;
 use gtk::{gdk, gio, glib};
 use std::collections::HashMap;
 
-const HELP: &str = "Usage: palobar-run-command-rs <run-command | run-panel | toggle-dock | toggle-launcher | toggle-quick-settings | toggle-calendar | lock | version>
+const HELP: &str = "Usage: palobar-run-command-rs <run-command | run-panel | toggle-dock | toggle-launcher | toggle-quick-settings | toggle-calendar | toggle-clipboard | lock | version>
 
 Commands
   run-command            Open the command launcher
@@ -24,6 +25,7 @@ Commands
   toggle-launcher        Toggle the applications launcher
   toggle-quick-settings  Toggle Quick Settings
   toggle-calendar        Toggle Calendar and Notifications
+  toggle-clipboard       Toggle Clipboard History
   lock                   Lock the Wayland session
   version                Print the Palobar version";
 
@@ -70,6 +72,12 @@ fn main() -> ExitCode {
             "io.Astal.Palobar.RustCalendar",
             calendar::install_style,
             calendar::toggle_first_monitor,
+        ),
+        Some(clipboard::ACTION) => toggle_popup(
+            clipboard::ACTION,
+            "io.Astal.Palobar.RustClipboard",
+            clipboard::install_style,
+            clipboard::toggle_first_monitor,
         ),
         Some("lock") => lockscreen::run(),
         Some("version") => {

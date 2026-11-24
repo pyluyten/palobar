@@ -821,6 +821,7 @@ pub fn toggle(app: &gtk::Application, monitor: &gdk::Monitor, indicator: Option<
         return;
     }
     crate::calendar::close(app);
+    crate::clipboard::close(app);
     let card = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
         .spacing(14)
