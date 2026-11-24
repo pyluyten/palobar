@@ -2,6 +2,7 @@ mod bar;
 mod calendar;
 mod dock;
 mod history;
+mod launcher;
 mod lockscreen;
 mod panel_popup;
 mod quick_settings;
@@ -12,12 +13,13 @@ use gtk::prelude::*;
 use gtk::{gdk, gio, glib};
 use std::collections::HashMap;
 
-const HELP: &str = "Usage: palobar-run-command-rs <run-command | run-panel | toggle-dock | toggle-quick-settings | toggle-calendar | lock | version>
+const HELP: &str = "Usage: palobar-run-command-rs <run-command | run-panel | toggle-dock | toggle-launcher | toggle-quick-settings | toggle-calendar | lock | version>
 
 Commands
   run-command            Open the command launcher
   run-panel              Open the panel
   toggle-dock            Toggle the standalone dock
+  toggle-launcher        Toggle the applications launcher
   toggle-quick-settings  Toggle Quick Settings
   toggle-calendar        Toggle Calendar and Notifications
   lock                   Lock the Wayland session
@@ -26,7 +28,24 @@ Commands
 fn main() -> ExitCode {
     let mut args = std::env::args_os().skip(1);
     let command = args.next();
-    if args.next().is_some() {
+    let mut args: Vec<_> = args.collect();
+    let mode = command.as_deref().and_then(std::ffi::OsStr::to_str);
+    if matches!(mode, Some("toggle-launcher" | "close-launcher")) && args.is_empty()
+        || mode == Some("open-launcher")
+            && (1..=2).contains(&args.len())
+            && args[0]
+                .to_str()
+                .is_some_and(|index| index.parse::<u32>().is_ok())
+    {
+        if mode == Some("open-launcher") && args.len() == 2 {
+            let mut query = std::ffi::OsString::from("query=");
+            query.push(&args[1]);
+            args[1] = query;
+        }
+        args.insert(0, command.expect("launcher command"));
+        return launcher::run(&args);
+    }
+    if !args.is_empty() {
         eprintln!("{HELP}");
         return ExitCode::FAILURE;
     }

@@ -126,6 +126,7 @@ function createCaptureWindow(monitor: Gdk.Monitor, index: number) {
   const win = new Astal.Window({
     visible: false,
     name: `overview-capture-${index}`,
+    namespace: `overview-capture-${index}`,
     gdkmonitor: monitor,
     layer: Astal.Layer.OVERLAY,
     exclusivity: Astal.Exclusivity.IGNORE,

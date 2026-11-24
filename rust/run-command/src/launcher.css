@@ -1,0 +1,44 @@
+window.launcher-window {
+  background: rgba(22, 22, 26, 0.90);
+  color: #f6f5f4;
+  font-family: Cantarell, Inter, sans-serif;
+}
+.launcher-search {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 4px 16px;
+  min-height: 32px;
+  color: #f6f5f4;
+  font-size: 14px;
+}
+.launcher-search:focus-within { border-color: #3584e4; background: rgba(255, 255, 255, 0.16); }
+.launcher-nav-btn {
+  background: transparent;
+  box-shadow: none;
+  border: none;
+  border-radius: 999px;
+  padding: 10px;
+  color: #f6f5f4;
+}
+.launcher-nav-btn:hover { background: rgba(255, 255, 255, 0.1); }
+.launcher-nav-btn:disabled { opacity: 0.25; }
+.launcher-grid { padding: 8px 12px; }
+.launcher-flow-child { border-radius: 16px; padding: 12px 8px; }
+.launcher-flow-child:hover { background: rgba(255, 255, 255, 0.09); }
+.launcher-flow-child:selected, .launcher-flow-child:focus {
+  background: rgba(255, 255, 255, 0.16);
+  outline: 1px solid rgba(255, 255, 255, 0.3);
+}
+.launcher-tile-label { font-size: 12.5px; font-weight: 500; color: #f6f5f4; }
+.launcher-dot {
+  background: rgba(255, 255, 255, 0.35);
+  box-shadow: none;
+  border: none;
+  border-radius: 999px;
+  min-width: 8px;
+  min-height: 8px;
+  padding: 0;
+}
+.launcher-dot.active { background: #fff; }
+.launcher-empty { color: #bbb; }

@@ -3,6 +3,7 @@ import { Astal, Gdk, Gtk } from "ags/gtk4";
 import type AstalApps from "gi://AstalApps";
 import type GObject from "gi://GObject";
 import GLib from "gi://GLib";
+import Gio from "gi://Gio";
 import { popups } from "../services/popups";
 import { getApps, scheduleGc } from "../services/runtime";
 import { createMiniDock } from "./Dock";
@@ -12,6 +13,8 @@ const PAGE_ROWS = 3;
 const APPS_PER_PAGE = PAGE_COLS * PAGE_ROWS;
 const APP_ICON_SIZE = 81;
 
+const rustCommand = GLib.getenv("PALOBAR_RUST_COMMAND");
+let nativeLauncher: Gio.Subprocess | null = null;
 let launcherWindow: Gtk.Window | null = null;
 let disposeLauncher: (() => void) | null = null;
 const stateListeners = new Set<(open: boolean) => void>();
@@ -29,7 +32,37 @@ export function onLauncherStateChange(
   return () => stateListeners.delete(listener);
 }
 
+function startNativeLauncher(args: string[]) {
+  if (!rustCommand || nativeLauncher) return;
+  popups.close();
+  try {
+    const process = Gio.Subprocess.new([rustCommand, ...args], Gio.SubprocessFlags.NONE);
+    nativeLauncher = process;
+    process.wait_async(null, (_, result) => {
+      try {
+        process.wait_finish(result);
+      } finally {
+        if (nativeLauncher === process) {
+          nativeLauncher = null;
+          notifyLauncherState(false);
+        }
+      }
+    });
+    notifyLauncherState(true);
+  } catch (error) {
+    console.error("[launcher] Could not start the Rust launcher:", error);
+  }
+}
+
 export function closeLauncher() {
+  if (rustCommand && nativeLauncher) {
+    try {
+      Gio.Subprocess.new([rustCommand, "close-launcher"], Gio.SubprocessFlags.NONE);
+    } catch (error) {
+      console.error("[launcher] Could not close the Rust launcher:", error);
+    }
+    return;
+  }
   const window = launcherWindow;
   if (!window) return;
 
@@ -44,17 +77,26 @@ export function closeLauncher() {
 }
 
 export function isLauncherOpen(): boolean {
-  return launcherWindow !== null;
+  return nativeLauncher !== null || launcherWindow !== null;
 }
 
 export function openLauncherFromOverview(monitor: Gdk.Monitor, initialQuery?: string) {
-  if (launcherWindow) return;
+  if (isLauncherOpen()) return;
+  if (rustCommand) {
+    const index = Math.max(0, app.get_monitors().indexOf(monitor));
+    startNativeLauncher(["open-launcher", String(index), initialQuery ?? ""]);
+    return;
+  }
   showLauncher(monitor, initialQuery, true);
 }
 
 export function toggleLauncher(monitor?: Gdk.Monitor, initialQuery?: string) {
-  if (launcherWindow) {
+  if (isLauncherOpen()) {
     closeLauncher();
+    return;
+  }
+  if (rustCommand) {
+    startNativeLauncher(["toggle-launcher"]);
     return;
   }
   showLauncher(monitor, initialQuery, false);

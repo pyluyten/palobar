@@ -217,6 +217,13 @@ struct ItemKey {
     favorite: bool,
 }
 
+#[derive(Clone, Copy)]
+pub enum ApplicationsButton {
+    Hidden,
+    Show,
+    Hide,
+}
+
 struct Dock {
     window: glib::WeakRef<gtk::ApplicationWindow>,
     container: glib::WeakRef<gtk::Box>,
@@ -224,6 +231,7 @@ struct Dock {
     windows: Vec<NiriWindow>,
     menu: Option<gtk::Popover>,
     rendered: Option<Vec<ItemKey>>,
+    applications: ApplicationsButton,
 }
 
 fn close_menu(dock: &DockRef) {
@@ -489,19 +497,34 @@ fn rebuild(dock: &DockRef) {
                 .build(),
         );
     }
+    let mode = dock.borrow().applications;
+    if matches!(mode, ApplicationsButton::Hidden) {
+        return;
+    }
+    let hide = matches!(mode, ApplicationsButton::Hide);
     let image = gtk::Image::from_icon_name("view-app-grid-symbolic");
     image.set_pixel_size(48);
     let applications = gtk::ToggleButton::builder()
-        .tooltip_text("Show Applications")
+        .active(hide)
+        .tooltip_text(if hide {
+            "Hide Applications"
+        } else {
+            "Show Applications"
+        })
         .child(&image)
         .build();
     applications.add_css_class("dock-item");
     let weak_window = dock.borrow().window.clone();
     applications.connect_clicked(move |_| {
         if let Some(window) = weak_window.upgrade() {
-            run_action(&window, true, || {
-                run_command("palobar-ctl", &["toggle-launcher"]).map(drop)
-            });
+            if hide {
+                window.close();
+            } else {
+                match crate::launcher::launch() {
+                    Ok(()) => window.close(),
+                    Err(error) => report(error),
+                }
+            }
         }
     });
     container.append(&applications);
@@ -606,9 +629,27 @@ fn build(app: &gtk::Application) {
     window.set_layer(Layer::Overlay);
     window.set_keyboard_mode(KeyboardMode::OnDemand);
     window.set_margin(Edge::Bottom, 24);
+    let container = widget(&window, ApplicationsButton::Show);
+    window.set_child(Some(&container));
+
+    let keys = gtk::EventControllerKey::new();
+    keys.connect_key_pressed(|controller, key, _, _| {
+        if key == gdk::Key::Escape {
+            if let Some(window) = controller.widget().and_downcast::<gtk::ApplicationWindow>() {
+                window.close();
+            }
+            return glib::Propagation::Stop;
+        }
+        glib::Propagation::Proceed
+    });
+    window.add_controller(keys);
+
+    window.present();
+}
+
+pub fn widget(window: &gtk::ApplicationWindow, applications: ApplicationsButton) -> gtk::Box {
     let container = gtk::Box::new(gtk::Orientation::Horizontal, 12);
     container.add_css_class("dock");
-    window.set_child(Some(&container));
 
     let path = glib::user_config_dir().join("palobar");
     if let Err(error) = std::fs::create_dir_all(&path) {
@@ -622,6 +663,7 @@ fn build(app: &gtk::Application) {
         windows: Vec::new(),
         menu: None,
         rendered: None,
+        applications,
     }));
     let drop = gtk::DropTarget::new(String::static_type(), gdk::DragAction::COPY);
     let drop_dock = dock.clone();
@@ -634,18 +676,6 @@ fn build(app: &gtk::Application) {
             && update_favorite(&drop_dock, &id, true)
     });
     container.add_controller(drop);
-
-    let keys = gtk::EventControllerKey::new();
-    keys.connect_key_pressed(|controller, key, _, _| {
-        if key == gdk::Key::Escape {
-            if let Some(window) = controller.widget().and_downcast::<gtk::ApplicationWindow>() {
-                window.close();
-            }
-            return glib::Propagation::Stop;
-        }
-        glib::Propagation::Proceed
-    });
-    window.add_controller(keys);
 
     match gio::File::for_path(path)
         .monitor_directory(gio::FileMonitorFlags::WATCH_MOVES, gio::Cancellable::NONE)
@@ -668,10 +698,20 @@ fn build(app: &gtk::Application) {
     let close_dock = dock.clone();
     window.connect_unrealize(move |_| close_menu(&close_dock));
     rebuild(&dock);
-    if let Err(error) = watch_windows(&dock, &window) {
+    if let Err(error) = watch_windows(&dock, window) {
         report(error);
     }
-    window.present();
+    container
+}
+
+pub fn install_style(display: &gdk::Display) {
+    let css = gtk::CssProvider::new();
+    css.load_from_data(include_str!("dock.css"));
+    gtk::style_context_add_provider_for_display(
+        display,
+        &css,
+        gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+    );
 }
 
 pub fn run() -> glib::ExitCode {
@@ -680,13 +720,7 @@ pub fn run() -> glib::ExitCode {
         .build();
     app.connect_startup(|_| {
         if let Some(display) = gdk::Display::default() {
-            let css = gtk::CssProvider::new();
-            css.load_from_data(include_str!("dock.css"));
-            gtk::style_context_add_provider_for_display(
-                &display,
-                &css,
-                gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
-            );
+            install_style(&display);
         }
     });
     app.connect_activate(build);

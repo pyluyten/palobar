@@ -10,7 +10,7 @@ import { displayWorkspaces, WorkspaceDialog } from "./widgets/WorkspaceDialog";
 import { QuickSettings } from "./widgets/QuickSettings";
 import { NotificationToasts } from "./widgets/NotificationToasts";
 import { ClipboardPopup } from "./widgets/ClipboardPopup";
-import { toggleLauncher } from "./widgets/Launcher";
+import { closeLauncher, toggleLauncher } from "./widgets/Launcher";
 import { toggleStandaloneDock } from "./widgets/StandaloneDock";
 import { toggleRunCommand } from "./widgets/RunCommand";
 import { initOverviewCapture } from "./widgets/OverviewCapture";
@@ -141,6 +141,7 @@ app.start({
       return;
     }
     if (cmd === "quit") {
+      closeLauncher();
       stopWallpaper();
       stopPowerService();
       stopClipboardService();

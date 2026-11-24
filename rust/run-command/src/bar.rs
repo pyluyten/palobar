@@ -497,6 +497,15 @@ pub fn run() -> gtk::glib::ExitCode {
     let app = Application::builder().application_id(APP_ID).build();
     quick_settings::register_panel_action(&app);
     calendar::register_panel_action(&app);
+    let close_popups = gtk::gio::SimpleAction::new("close-popups", None);
+    let weak_app = app.downgrade();
+    close_popups.connect_activate(move |_, _| {
+        if let Some(app) = weak_app.upgrade() {
+            calendar::close(&app);
+            quick_settings::close(&app);
+        }
+    });
+    app.add_action(&close_popups);
     let state = workspaces.clone();
     app.connect_activate(move |app| {
         if !app.windows().is_empty() {
