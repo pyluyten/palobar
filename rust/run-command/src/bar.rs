@@ -1,4 +1,4 @@
-use crate::{calendar, launcher, overview, quick_settings};
+use crate::{calendar, launcher, notifications, overview, quick_settings};
 use chrono::Local;
 use gtk::gdk;
 use gtk::prelude::*;
@@ -30,12 +30,6 @@ struct Workspace {
     is_focused: bool,
     #[serde(default)]
     is_urgent: bool,
-}
-
-#[derive(Deserialize)]
-struct BarState {
-    active_popup: Option<String>,
-    unread_count: usize,
 }
 
 fn run_ctl(request: &str) -> Option<String> {
@@ -317,6 +311,7 @@ fn build_bar(
     monitor: &gdk::Monitor,
     index: u32,
     workspaces: Arc<Mutex<Vec<Workspace>>>,
+    notifications: Option<&notifications::Service>,
 ) {
     let window = ApplicationWindow::builder()
         .application(app)
@@ -378,6 +373,9 @@ fn build_bar(
     let badge = Label::new(None);
     badge.add_css_class("notif-badge");
     badge.set_visible(false);
+    if let Some(notifications) = notifications {
+        notifications.add_badge(&badge);
+    }
     let date = Label::new(Some(&format_date()));
     clock_content.append(&badge);
     clock_content.append(&date);
@@ -465,24 +463,14 @@ fn build_bar(
         gtk::glib::ControlFlow::Continue
     });
 
-    let badge_copy = badge.clone();
-    let weak_app = app.downgrade();
     let clipboard_copy = clipboard.clone();
     gtk::glib::timeout_add_local(Duration::from_secs(1), move || {
-        if let Some(state) =
-            run_ctl("get-bar-state").and_then(|text| serde_json::from_str::<BarState>(&text).ok())
-        {
-            let calendar_open = weak_app
-                .upgrade()
-                .is_some_and(|app| calendar::is_open(&app));
-            badge_copy.set_text(&state.unread_count.to_string());
-            badge_copy.set_visible(!calendar_open && state.unread_count > 0);
-            clipboard_copy.set_css_classes(if state.active_popup.as_deref() == Some("clipboard") {
-                &["panel-button", "clipboard-button", "open"]
-            } else {
-                &["panel-button", "clipboard-button"]
-            });
-        }
+        let clipboard_open = run_ctl("get-active-popup").as_deref() == Some("clipboard");
+        clipboard_copy.set_css_classes(if clipboard_open {
+            &["panel-button", "clipboard-button", "open"]
+        } else {
+            &["panel-button", "clipboard-button"]
+        });
         gtk::glib::ControlFlow::Continue
     });
 
@@ -538,13 +526,35 @@ pub fn run() -> gtk::glib::ExitCode {
             &provider,
             gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
+        let notifications = match notifications::start(app, &display) {
+            Ok(service) => Some(service),
+            Err(error) => {
+                eprintln!("[notifications] {error}");
+                None
+            }
+        };
         let monitors = display.monitors();
         for index in 0..monitors.n_items() {
             let Some(monitor) = monitors.item(index).and_downcast::<gdk::Monitor>() else {
                 continue;
             };
-            build_bar(app, &monitor, index, state.clone());
+            build_bar(
+                app,
+                &monitor,
+                index,
+                state.clone(),
+                notifications.as_deref(),
+            );
         }
     });
-    app.run_with_args::<&str>(&[])
+    let weak = app.downgrade();
+    let terminate = gtk::glib::unix_signal_add_local(libc::SIGTERM, move || {
+        if let Some(app) = weak.upgrade() {
+            app.quit();
+        }
+        gtk::glib::ControlFlow::Continue
+    });
+    let status = app.run_with_args::<&str>(&[]);
+    terminate.remove();
+    status
 }

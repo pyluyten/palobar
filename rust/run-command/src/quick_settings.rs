@@ -700,12 +700,7 @@ struct Dnd {
 }
 
 impl Dnd {
-    fn update(&self, value: &str) {
-        let state = match value.trim() {
-            "true" => Some(true),
-            "false" => Some(false),
-            _ => None,
-        };
+    fn update(&self, state: Option<bool>) {
         self.button.set_sensitive(state.is_some());
         if let Some(on) = state {
             active(&self.button, on);
@@ -722,11 +717,9 @@ impl Dnd {
             return;
         }
         let revision = self.revision.get();
-        let result = command(&["palobar-ctl", "get-quick-settings-dnd"])
-            .await
-            .unwrap_or_default();
+        let result = crate::notifications::dnd(false).await;
         if revision == self.revision.get() {
-            self.update(&result);
+            self.update(result);
         }
     }
 }
@@ -794,11 +787,9 @@ fn quick_toggles(card: &gtk::Box, app: &gtk::Application) -> Rc<Dnd> {
         button.set_sensitive(false);
         let hold = app.upgrade().map(|app| app.hold());
         glib::spawn_future_local(async move {
-            let result = command(&["palobar-ctl", "toggle-quick-settings-dnd"])
-                .await
-                .unwrap_or_default();
+            let result = crate::notifications::dnd(true).await;
             dnd.busy.set(false);
-            dnd.update(&result);
+            dnd.update(result);
             drop(hold);
         });
     });
@@ -816,7 +807,9 @@ pub fn install_style(display: &gdk::Display) {
 }
 
 pub fn is_open(app: &gtk::Application) -> bool {
-    app.windows().iter().any(|window| window.has_css_class(CLASS))
+    app.windows()
+        .iter()
+        .any(|window| window.has_css_class(CLASS))
 }
 
 pub fn close(app: &gtk::Application) -> bool {

@@ -23,7 +23,7 @@ import {
 import { getAccentColor, subscribeAppearance } from "./services/appearance";
 import { lockScreen } from "./services/lockscreen";
 import { popups } from "./services/popups";
-import { markNotificationsRead, unreadNotificationCount } from "./services/unread-notifications";
+import { initUnreadNotifications, markNotificationsRead, unreadNotificationCount } from "./services/unread-notifications";
 
 const rustCommand = GLib.getenv("PALOBAR_RUST_COMMAND");
 const rustRequests = new Set(["run-command", "toggle-dock", "toggle-launcher", "toggle-quick-settings", "toggle-calendar", "lock"]);
@@ -81,7 +81,7 @@ app.start({
       res("ok");
       return;
     }
-    if (cmd === "get-quick-settings-dnd" || cmd === "toggle-quick-settings-dnd") {
+    if (!rustCommand && (cmd === "get-quick-settings-dnd" || cmd === "toggle-quick-settings-dnd")) {
       const notifd = AstalNotifd.get_default();
       if (cmd === "toggle-quick-settings-dnd") {
         notifd.dontDisturb = !notifd.dontDisturb;
@@ -89,7 +89,7 @@ app.start({
       res(String(notifd.dontDisturb));
       return;
     }
-    if (cmd === "get-calendar-notifications") {
+    if (!rustCommand && cmd === "get-calendar-notifications") {
       const notifd = AstalNotifd.get_default();
       markNotificationsRead();
       res(JSON.stringify({
@@ -106,7 +106,7 @@ app.start({
       }));
       return;
     }
-    if (cmd === "dismiss-calendar-notification" || cmd === "clear-calendar-notifications") {
+    if (!rustCommand && (cmd === "dismiss-calendar-notification" || cmd === "clear-calendar-notifications")) {
       const notifications = AstalNotifd.get_default().notifications;
       if (cmd === "clear-calendar-notifications") {
         for (const notification of [...notifications]) notification.dismiss();
@@ -120,15 +120,28 @@ app.start({
       res(popups.active.get() ?? "none");
       return;
     }
-    if (cmd === "get-unread-count") {
-      res(String(unreadNotificationCount.get()));
-      return;
-    }
-    if (cmd === "get-bar-state") {
-      res(JSON.stringify({
-        active_popup: popups.active.get(),
-        unread_count: unreadNotificationCount.get(),
-      }));
+    if (cmd === "get-unread-count" || cmd === "get-bar-state") {
+      const respond = (count: number) => res(cmd === "get-unread-count"
+        ? String(count)
+        : JSON.stringify({ active_popup: popups.active.get(), unread_count: count }));
+      if (!rustCommand) {
+        respond(unreadNotificationCount.get());
+      } else {
+        Gio.DBus.session.call(
+          "io.Astal.Palobar.RustBar", "/io/Astal/Palobar/Notifications",
+          "io.Astal.Palobar.Notifications", "GetUnread", null, null,
+          Gio.DBusCallFlags.NO_AUTO_START, 500, null,
+          (connection, result) => {
+            let count = 0;
+            try {
+              count = connection?.call_finish(result).deep_unpack()[0] ?? 0;
+            } catch {
+              // The backend can start before the Rust panel.
+            }
+            respond(count);
+          },
+        );
+      }
       return;
     }
     if (cmd === "run-command") {
@@ -184,6 +197,7 @@ app.start({
 
     const monitors = app.get_monitors();
     if (!rustCommand) {
+      initUnreadNotifications();
       monitors.forEach((monitor, index) => Bar(monitor, index));
     }
 
@@ -192,9 +206,9 @@ app.start({
       if (!rustCommand) {
         CalendarPopup(primary);
         QuickSettings(primary);
+        NotificationToasts(primary);
       }
       WorkspaceDialog(primary);
-      NotificationToasts(primary);
       ClipboardPopup(primary);
     }
   },

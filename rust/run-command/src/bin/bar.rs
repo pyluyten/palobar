@@ -8,6 +8,8 @@ mod dock;
 mod launcher;
 #[path = "../lockscreen.rs"]
 mod lockscreen;
+#[path = "../notifications.rs"]
+mod notifications;
 #[path = "../overview.rs"]
 mod overview;
 #[path = "../panel_popup.rs"]

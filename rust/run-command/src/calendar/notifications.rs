@@ -1,27 +1,10 @@
+use crate::notifications::{app_icon, request, Notification, Snapshot};
+use gtk::glib;
 use gtk::prelude::*;
-use gtk::{gdk, gio, glib};
-use serde::Deserialize;
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::Duration;
-
-#[derive(Deserialize, PartialEq, Eq)]
-struct Snapshot {
-    dnd: bool,
-    notifications: Vec<Notification>,
-}
-
-#[derive(Deserialize, PartialEq, Eq)]
-struct Notification {
-    id: u32,
-    time: i64,
-    app_name: String,
-    desktop_entry: String,
-    app_icon: String,
-    summary: String,
-    body: String,
-}
 
 impl Notification {
     fn desktop_id(&self) -> &str {
@@ -53,32 +36,6 @@ fn sections(notifications: &[Notification]) -> Vec<(String, Vec<&Notification>)>
         groups[index].1.push(notification);
     }
     groups
-}
-
-fn app_icon(notification: &Notification) -> gtk::Image {
-    let desktop = notification.desktop_id();
-    let desktop_icon = (!desktop.is_empty())
-        .then(|| gio::DesktopAppInfo::new(&format!("{desktop}.desktop")))
-        .flatten()
-        .and_then(|info| info.icon());
-    let image = if let Some(icon) = desktop_icon {
-        gtk::Image::from_gicon(&icon)
-    } else if notification.app_icon.starts_with('/') || notification.app_icon.starts_with("file://")
-    {
-        let icon = gio::FileIcon::new(&gio::File::for_commandline_arg(&notification.app_icon));
-        gtk::Image::from_gicon(&icon)
-    } else {
-        let found = gdk::Display::default().is_some_and(|display| {
-            gtk::IconTheme::for_display(&display).has_icon(&notification.app_icon)
-        });
-        gtk::Image::from_icon_name(if found {
-            &notification.app_icon
-        } else {
-            "dialog-information-symbolic"
-        })
-    };
-    image.set_pixel_size(24);
-    image
 }
 
 struct Feed {
@@ -114,11 +71,11 @@ impl Feed {
             .unwrap_or_default();
         header.append(&super::label(&time, "date-muted"));
         let dismiss = super::icon_button("window-close-symbolic", "Dismiss Notification");
-        let id = notification.id.to_string();
+        let id = notification.id;
         let weak = Rc::downgrade(self);
         dismiss.connect_clicked(move |_| {
             if let Some(feed) = weak.upgrade() {
-                feed.act("dismiss-calendar-notification", Some(id.clone()));
+                feed.act("Dismiss", Some(id));
             }
         });
         header.append(&dismiss);
@@ -137,7 +94,7 @@ impl Feed {
         item
     }
 
-    fn act(self: &Rc<Self>, action: &'static str, id: Option<String>) {
+    fn act(self: &Rc<Self>, action: &'static str, id: Option<u32>) {
         if self.busy.replace(true) {
             return;
         }
@@ -147,11 +104,8 @@ impl Feed {
         self.list.set_sensitive(false);
         let weak = Rc::downgrade(self);
         let handle = glib::spawn_future_local(async move {
-            let mut args = vec!["palobar-ctl", action];
-            if let Some(id) = id.as_deref() {
-                args.push(id);
-            }
-            if let Err(error) = crate::quick_settings::command(&args).await {
+            let params = id.map(|id| (id,).to_variant());
+            if let Err(error) = request(action, params.as_ref()).await {
                 eprintln!("[calendar] Notification action failed: {error}");
             }
             if let Some(feed) = weak.upgrade() {
@@ -283,9 +237,7 @@ impl Feed {
 }
 
 async fn read() -> Option<Snapshot> {
-    let output = crate::quick_settings::command(&["palobar-ctl", "get-calendar-notifications"])
-        .await
-        .ok()?;
+    let (output,) = request("Snapshot", None).await.ok()?.get::<(String,)>()?;
     serde_json::from_str(&output).ok()
 }
 
@@ -345,10 +297,7 @@ pub(super) fn section(parent: &gtk::Box, window: &gtk::ApplicationWindow) -> gli
         revision: Cell::default(),
         pending: RefCell::default(),
     });
-    for (button, action) in [
-        (&feed.dnd, "toggle-quick-settings-dnd"),
-        (&feed.clear, "clear-calendar-notifications"),
-    ] {
+    for (button, action) in [(&feed.dnd, "ToggleDnd"), (&feed.clear, "Clear")] {
         let weak = Rc::downgrade(&feed);
         button.connect_clicked(move |_| {
             if let Some(feed) = weak.upgrade() {
