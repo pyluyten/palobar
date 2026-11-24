@@ -1,3 +1,6 @@
+#[path = "preferences/sound.rs"]
+mod sound;
+
 use gtk::prelude::*;
 use gtk::{gio, glib};
 use serde::Deserialize;
@@ -538,8 +541,26 @@ fn build(app: &gtk::Application) {
         .icon_name("io.Astal.palobar-prefs")
         .build();
     window.add_css_class("prefs-window");
-    let root = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    root.append(&label("Output", "prefs-page-header"));
+    let root = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    let sidebar = gtk::Box::new(gtk::Orientation::Vertical, 4);
+    sidebar.add_css_class("prefs-sidebar");
+    sidebar.append(&label("Settings", "prefs-sidebar-title"));
+    let navigation = gtk::ListBox::builder()
+        .selection_mode(gtk::SelectionMode::Browse)
+        .build();
+    navigation.add_css_class("prefs-navigation");
+    sidebar.append(&navigation);
+    root.append(&sidebar);
+
+    let pane = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    let header = label("Output", "prefs-page-header");
+    pane.append(&header);
+    let stack = gtk::Stack::builder()
+        .hexpand(true)
+        .vexpand(true)
+        .transition_type(gtk::StackTransitionType::Crossfade)
+        .transition_duration(150)
+        .build();
     let content = gtk::Box::new(gtk::Orientation::Vertical, 12);
     content.add_css_class("prefs-page-body");
     content.append(&label("Temporary settings", "prefs-group-title"));
@@ -551,7 +572,33 @@ fn build(app: &gtk::Application) {
         .vexpand(true)
         .child(&content)
         .build();
-    root.append(&scroll);
+    stack.add_titled(&scroll, Some("output"), "Output");
+    stack.add_titled(&sound::build(app), Some("sound"), "Sound");
+    let pages = [
+        ("output", "Output", "video-display-symbolic"),
+        ("sound", "Sound", "multimedia-volume-control-symbolic"),
+    ];
+    for (_, title, icon) in pages {
+        let item = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+        item.append(&gtk::Image::from_icon_name(icon));
+        item.append(&gtk::Label::new(Some(title)));
+        navigation.append(&item);
+    }
+    navigation.connect_row_selected({
+        let stack = stack.downgrade();
+        move |_, row| {
+            let (Some(stack), Some(row)) = (stack.upgrade(), row) else {
+                return;
+            };
+            if let Some(&(name, title, _)) = pages.get(row.index() as usize) {
+                stack.set_visible_child_name(name);
+                header.set_text(title);
+            }
+        }
+    });
+    navigation.select_row(navigation.row_at_index(0).as_ref());
+    pane.append(&stack);
+    root.append(&pane);
     window.set_child(Some(&root));
     let page = Rc::new(Page {
         window: window.downgrade(),

@@ -205,13 +205,13 @@ fn header(card: &gtk::Box, window: &gtk::ApplicationWindow) {
 }
 
 #[derive(Clone, Copy)]
-struct Volume {
-    level: f64,
-    muted: bool,
+pub(crate) struct Volume {
+    pub level: f64,
+    pub muted: bool,
 }
 
 impl Volume {
-    fn parse(output: &str) -> Option<Self> {
+    pub(crate) fn parse(output: &str) -> Option<Self> {
         let level = output
             .strip_prefix("Volume: ")?
             .split_whitespace()
@@ -220,11 +220,13 @@ impl Volume {
             .ok()?;
         level.is_finite().then_some(Self {
             level,
-            muted: output.contains("[MUTED]"),
+            muted: output
+                .split_whitespace()
+                .any(|word| word.trim_matches(['[', ']']) == "MUTED"),
         })
     }
 
-    fn icon(self) -> &'static str {
+    pub(crate) fn icon(self) -> &'static str {
         if self.muted || self.level <= 0.0 {
             "audio-volume-muted-symbolic"
         } else if self.level < 0.33 {
