@@ -91,14 +91,6 @@ fn session_button(
         let Some(window) = window.upgrade() else {
             return;
         };
-        if matches!(args[0], "palobar-prefs" | "ags") {
-            let argv: Vec<_> = args.iter().map(OsStr::new).collect();
-            match gio::Subprocess::newv(&argv, gio::SubprocessFlags::NONE) {
-                Ok(_) => window.close(),
-                Err(error) => report(&error.to_string()),
-            }
-            return;
-        }
         let Some(app) = window.application() else {
             return;
         };
@@ -137,17 +129,15 @@ fn header(card: &gtk::Box, window: &gtk::ApplicationWindow) {
         "Preferences",
         "qs-circle-btn",
     );
-    let prefs_command = if glib::find_program_in_path("palobar-prefs").is_some() {
-        vec!["palobar-prefs"]
-    } else {
-        let path = if std::path::Path::new("prefs.ts").is_file() {
-            "prefs.ts"
-        } else {
-            "src/prefs.ts"
-        };
-        vec!["ags", "run", path]
-    };
-    session_button(&prefs, window, prefs_command, false);
+    let weak_window = window.downgrade();
+    prefs.connect_clicked(move |_| match crate::preferences::launch() {
+        Ok(()) => {
+            if let Some(window) = weak_window.upgrade() {
+                window.close();
+            }
+        }
+        Err(error) => report(&error),
+    });
     row.append(&prefs);
     row.append(&gtk::Box::builder().hexpand(true).build());
 
@@ -684,7 +674,7 @@ impl Wifi {
     }
 }
 
-fn appearance() -> Option<gio::Settings> {
+pub(crate) fn appearance() -> Option<gio::Settings> {
     let schema =
         gio::SettingsSchemaSource::default()?.lookup("org.gnome.desktop.interface", true)?;
     schema

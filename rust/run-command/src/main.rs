@@ -8,6 +8,7 @@ mod lockscreen;
 mod notifications;
 mod overview;
 mod panel_popup;
+mod preferences;
 mod quick_settings;
 mod run_command;
 
@@ -16,7 +17,7 @@ use gtk::prelude::*;
 use gtk::{gdk, gio, glib};
 use std::collections::HashMap;
 
-const HELP: &str = "Usage: palobar-run-command-rs <run-command | run-panel | toggle-dock | toggle-launcher | toggle-quick-settings | toggle-calendar | toggle-clipboard | lock | version>
+const HELP: &str = "Usage: palobar-run-command-rs <run-command | run-panel | toggle-dock | toggle-launcher | toggle-quick-settings | toggle-calendar | toggle-clipboard | prefs | lock | version>
 
 Commands
   run-command            Open the command launcher
@@ -26,6 +27,7 @@ Commands
   toggle-quick-settings  Toggle Quick Settings
   toggle-calendar        Toggle Calendar and Notifications
   toggle-clipboard       Toggle Clipboard History
+  prefs                  Open Palobar Settings
   lock                   Lock the Wayland session
   version                Print the Palobar version";
 
@@ -48,6 +50,9 @@ fn main() -> ExitCode {
         }
         args.insert(0, command.expect("launcher command"));
         return launcher::run(&args);
+    }
+    if mode == Some(preferences::PREVIEW_COMMAND) {
+        return preferences::run_preview(&args);
     }
     if !args.is_empty() {
         eprintln!("{HELP}");
@@ -79,6 +84,7 @@ fn main() -> ExitCode {
             clipboard::install_style,
             clipboard::toggle_first_monitor,
         ),
+        Some("prefs") => preferences::run(),
         Some("lock") => lockscreen::run(),
         Some("version") => {
             println!("{}", include_str!("../../../VERSION").trim());

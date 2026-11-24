@@ -16,12 +16,16 @@ mod notifications;
 mod overview;
 #[path = "../panel_popup.rs"]
 mod panel_popup;
+#[path = "../preferences.rs"]
+mod preferences;
 #[path = "../quick_settings.rs"]
 mod quick_settings;
 
 fn main() -> gtk::glib::ExitCode {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     match args.first().and_then(|arg| arg.to_str()) {
+        Some("prefs") => preferences::run(),
+        Some(preferences::PREVIEW_COMMAND) => preferences::run_preview(&args[1..]),
         Some("lock") => lockscreen::run(),
         Some("toggle-launcher") => launcher::run(&args),
         Some("toggle-dock") => dock::run(),
