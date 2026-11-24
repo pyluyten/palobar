@@ -4,6 +4,7 @@ mod dock;
 mod history;
 mod launcher;
 mod lockscreen;
+mod overview;
 mod panel_popup;
 mod quick_settings;
 mod run_command;

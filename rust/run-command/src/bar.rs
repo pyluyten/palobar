@@ -1,4 +1,4 @@
-use crate::{calendar, quick_settings};
+use crate::{calendar, launcher, overview, quick_settings};
 use chrono::Local;
 use gtk::gdk;
 use gtk::prelude::*;
@@ -11,6 +11,7 @@ use serde::Deserialize;
 use std::io::{BufRead, BufReader};
 use std::os::unix::process::CommandExt;
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -57,7 +58,7 @@ fn open_workspace_dialog(monitor_index: u32) {
     });
 }
 
-fn send_niri_action(action: &str, args: &[&str]) {
+pub fn send_niri_action(action: &str, args: &[&str]) {
     let action = action.to_string();
     let args = args.iter().map(|arg| arg.to_string()).collect::<Vec<_>>();
     thread::spawn(move || {
@@ -94,7 +95,7 @@ fn publish_workspaces(state: &Arc<Mutex<Vec<Workspace>>>, workspaces: Vec<Worksp
     }
 }
 
-fn start_workspace_event_stream(state: Arc<Mutex<Vec<Workspace>>>) {
+fn start_workspace_event_stream(state: Arc<Mutex<Vec<Workspace>>>, overview_open: Arc<AtomicBool>) {
     thread::spawn(move || loop {
         let parent = std::process::id() as libc::pid_t;
         let mut stream = Command::new("niri");
@@ -123,7 +124,13 @@ fn start_workspace_event_stream(state: Arc<Mutex<Vec<Workspace>>>) {
                         continue;
                     };
 
-                    if let Some(changed) = event.get("WorkspacesChanged") {
+                    if let Some(open) = event
+                        .get("OverviewOpenedOrClosed")
+                        .and_then(|state| state.get("is_open"))
+                        .and_then(|value| value.as_bool())
+                    {
+                        overview_open.store(open, Ordering::Relaxed);
+                    } else if let Some(changed) = event.get("WorkspacesChanged") {
                         if let Some(items) = changed.get("workspaces") {
                             if let Ok(items) =
                                 serde_json::from_value::<Vec<Workspace>>(items.clone())
@@ -152,6 +159,7 @@ fn start_workspace_event_stream(state: Arc<Mutex<Vec<Workspace>>>) {
                     }
                 }
             }
+            overview_open.store(false, Ordering::Relaxed);
             let _ = child.wait();
         }
         thread::sleep(Duration::from_secs(1));
@@ -464,7 +472,9 @@ fn build_bar(
         if let Some(state) =
             run_ctl("get-bar-state").and_then(|text| serde_json::from_str::<BarState>(&text).ok())
         {
-            let calendar_open = weak_app.upgrade().is_some_and(|app| calendar::is_open(&app));
+            let calendar_open = weak_app
+                .upgrade()
+                .is_some_and(|app| calendar::is_open(&app));
             badge_copy.set_text(&state.unread_count.to_string());
             badge_copy.set_visible(!calendar_open && state.unread_count > 0);
             clipboard_copy.set_css_classes(if state.active_popup.as_deref() == Some("clipboard") {
@@ -492,11 +502,13 @@ fn build_bar(
 pub fn run() -> gtk::glib::ExitCode {
     let initial_workspaces = query_workspaces();
     let workspaces = Arc::new(Mutex::new(initial_workspaces));
-    start_workspace_event_stream(workspaces.clone());
+    let overview_open = Arc::new(AtomicBool::new(false));
+    start_workspace_event_stream(workspaces.clone(), overview_open.clone());
 
     let app = Application::builder().application_id(APP_ID).build();
     quick_settings::register_panel_action(&app);
     calendar::register_panel_action(&app);
+    launcher::register_panel_action(&app);
     let close_popups = gtk::gio::SimpleAction::new("close-popups", None);
     let weak_app = app.downgrade();
     close_popups.connect_activate(move |_, _| {
@@ -518,6 +530,8 @@ pub fn run() -> gtk::glib::ExitCode {
         };
         quick_settings::install_style(&display);
         calendar::install_style(&display);
+        launcher::install_style(&display);
+        overview::install(app, &display, overview_open.clone());
         let provider = style_provider();
         gtk::style_context_add_provider_for_display(
             &display,

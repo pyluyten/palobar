@@ -7,6 +7,8 @@ use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::rc::Rc;
 
+const ACTION: &str = "launcher-command";
+const OVERVIEW_CLASS: &str = "overview-launcher";
 const APP_ID: &str = "io.Astal.Palobar.RustLauncher";
 
 struct App {
@@ -382,12 +384,15 @@ fn arrow(icon: &str, tooltip: &str) -> gtk::Button {
     button
 }
 
-fn build(app: &gtk::Application, monitor: &gdk::Monitor, query: &str, overview: bool) {
+pub fn build(app: &gtk::Application, monitor: &gdk::Monitor, query: &str, overview: bool) {
     let window = gtk::ApplicationWindow::builder()
         .application(app)
         .title("Applications")
         .build();
     window.add_css_class("launcher-window");
+    if overview {
+        window.add_css_class(OVERVIEW_CLASS);
+    }
     window.init_layer_shell();
     window.set_namespace(Some("activities-launcher"));
     window.set_monitor(Some(monitor));
@@ -619,62 +624,129 @@ pub fn launch() -> Result<(), String> {
     .map_err(|error| error.to_string())
 }
 
+pub fn install_style(display: &gdk::Display) {
+    dock::install_style(display);
+    let css = gtk::CssProvider::new();
+    css.load_from_data(include_str!("launcher.css"));
+    gtk::style_context_add_provider_for_display(
+        display,
+        &css,
+        gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+    );
+}
+
+pub fn window(app: &gtk::Application) -> Option<gtk::Window> {
+    app.windows()
+        .into_iter()
+        .find(|window| window.has_css_class("launcher-window"))
+}
+
+pub fn close_overview_launcher(app: &gtk::Application) {
+    if let Some(window) = window(app).filter(|window| window.has_css_class(OVERVIEW_CLASS)) {
+        window.close();
+    }
+}
+
+fn request(app: &gtk::Application, mode: &str, index: u32, query: &str) -> glib::ExitCode {
+    if let Some(window) = window(app) {
+        if mode != "open-launcher" {
+            window.close();
+        }
+        return glib::ExitCode::SUCCESS;
+    }
+    if mode == "close-launcher" {
+        return glib::ExitCode::SUCCESS;
+    }
+    let Some(display) = gdk::Display::default() else {
+        return glib::ExitCode::FAILURE;
+    };
+    let monitors = display.monitors();
+    if let Some(monitor) = monitors
+        .item(index)
+        .or_else(|| monitors.item(0))
+        .and_downcast::<gdk::Monitor>()
+    {
+        build(app, &monitor, query, mode == "open-launcher");
+        glib::ExitCode::SUCCESS
+    } else {
+        glib::ExitCode::FAILURE
+    }
+}
+
+pub fn register_panel_action(app: &gtk::Application) {
+    let weak = app.downgrade();
+    let action = gio::SimpleAction::new(
+        ACTION,
+        Some(glib::VariantTy::new("(sus)").expect("launcher action signature")),
+    );
+    action.connect_activate(move |_, parameter| {
+        if let (Some(app), Some((mode, monitor, query))) = (
+            weak.upgrade(),
+            parameter.and_then(|parameter| parameter.get::<(String, u32, String)>()),
+        ) {
+            request(&app, &mode, monitor, &query);
+        }
+    });
+    app.add_action(&action);
+}
+
+fn arguments(args: &[OsString]) -> (&str, u32, &str) {
+    let mode = args
+        .first()
+        .and_then(|arg| arg.to_str())
+        .unwrap_or("toggle-launcher");
+    let monitor = args
+        .get(1)
+        .and_then(|arg| arg.to_str())
+        .and_then(|arg| arg.parse().ok())
+        .unwrap_or(0);
+    let query = args
+        .get(2)
+        .and_then(|arg| arg.to_str())
+        .and_then(|arg| arg.strip_prefix("query="))
+        .unwrap_or_default();
+    (mode, monitor, query)
+}
+
 pub fn run(args: &[OsString]) -> glib::ExitCode {
+    if let Ok(bus) = gio::bus_get_sync(gio::BusType::Session, gio::Cancellable::NONE) {
+        let panel_id = crate::bar::APP_ID;
+        let path = format!("/{}", panel_id.replace('.', "/"));
+        let parameters = (
+            ACTION,
+            vec![arguments(args).to_variant()],
+            HashMap::<String, glib::Variant>::new(),
+        );
+        if bus
+            .call_sync(
+                Some(panel_id),
+                &path,
+                "org.gtk.Actions",
+                "Activate",
+                Some(&parameters.to_variant()),
+                None,
+                gio::DBusCallFlags::NO_AUTO_START,
+                1000,
+                gio::Cancellable::NONE,
+            )
+            .is_ok()
+        {
+            return glib::ExitCode::SUCCESS;
+        }
+    }
     let app = gtk::Application::builder()
         .application_id(APP_ID)
         .flags(gio::ApplicationFlags::HANDLES_COMMAND_LINE)
         .build();
     app.connect_startup(|_| {
         if let Some(display) = gdk::Display::default() {
-            dock::install_style(&display);
-            let css = gtk::CssProvider::new();
-            css.load_from_data(include_str!("launcher.css"));
-            gtk::style_context_add_provider_for_display(
-                &display,
-                &css,
-                gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
-            );
+            install_style(&display);
         }
     });
     app.connect_command_line(|app, command| {
         let args = command.arguments();
-        let mode = args
-            .get(1)
-            .and_then(|arg| arg.to_str())
-            .unwrap_or("toggle-launcher");
-        if let Some(window) = app.windows().first() {
-            if mode != "open-launcher" {
-                window.close();
-            }
-            return glib::ExitCode::SUCCESS;
-        }
-        if mode == "close-launcher" {
-            return glib::ExitCode::SUCCESS;
-        }
-        let Some(display) = gdk::Display::default() else {
-            return glib::ExitCode::FAILURE;
-        };
-        let monitors = display.monitors();
-        let index = args
-            .get(2)
-            .and_then(|arg| arg.to_str())
-            .and_then(|arg| arg.parse().ok())
-            .unwrap_or(0);
-        let query = args
-            .get(3)
-            .and_then(|arg| arg.to_str())
-            .and_then(|arg| arg.strip_prefix("query="))
-            .unwrap_or_default();
-        if let Some(monitor) = monitors
-            .item(index)
-            .or_else(|| monitors.item(0))
-            .and_downcast::<gdk::Monitor>()
-        {
-            build(app, &monitor, query, mode == "open-launcher");
-            glib::ExitCode::SUCCESS
-        } else {
-            glib::ExitCode::FAILURE
-        }
+        let (mode, monitor, query) = arguments(&args[1..]);
+        request(app, mode, monitor, query)
     });
     let argv: Vec<_> = std::iter::once("palobar-rust".into())
         .chain(args.iter().map(|arg| arg.to_string_lossy()))

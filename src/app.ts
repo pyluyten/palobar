@@ -26,12 +26,12 @@ import { popups } from "./services/popups";
 import { markNotificationsRead, unreadNotificationCount } from "./services/unread-notifications";
 
 const rustCommand = GLib.getenv("PALOBAR_RUST_COMMAND");
-const rustRequests = new Set(["run-command", "toggle-dock", "toggle-quick-settings", "toggle-calendar", "lock"]);
+const rustRequests = new Set(["run-command", "toggle-dock", "toggle-launcher", "toggle-quick-settings", "toggle-calendar", "lock"]);
 
 app.start({
   css: style,
   requestHandler(request, res) {
-    const cmd = request[0];
+    const cmd = rustCommand && request[0] === "launcher" ? "toggle-launcher" : request[0];
     if (rustCommand && rustRequests.has(cmd)) {
       try {
         Gio.Subprocess.new([rustCommand, cmd], Gio.SubprocessFlags.NONE);
@@ -180,7 +180,7 @@ app.start({
     initWallpaperService();
     initPowerService();
     initClipboardService();
-    initOverviewCapture();
+    if (!rustCommand) initOverviewCapture();
 
     const monitors = app.get_monitors();
     if (!rustCommand) {

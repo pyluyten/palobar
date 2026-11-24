@@ -815,6 +815,10 @@ pub fn install_style(display: &gdk::Display) {
     );
 }
 
+pub fn is_open(app: &gtk::Application) -> bool {
+    app.windows().iter().any(|window| window.has_css_class(CLASS))
+}
+
 pub fn close(app: &gtk::Application) -> bool {
     crate::panel_popup::close(app, CLASS)
 }

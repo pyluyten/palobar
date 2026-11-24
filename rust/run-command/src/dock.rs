@@ -217,10 +217,11 @@ struct ItemKey {
     favorite: bool,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub enum ApplicationsButton {
     Hidden,
     Show,
+    OpenOverview(Rc<dyn Fn()>),
     Hide,
 }
 
@@ -497,7 +498,7 @@ fn rebuild(dock: &DockRef) {
                 .build(),
         );
     }
-    let mode = dock.borrow().applications;
+    let mode = dock.borrow().applications.clone();
     if matches!(mode, ApplicationsButton::Hidden) {
         return;
     }
@@ -517,13 +518,14 @@ fn rebuild(dock: &DockRef) {
     let weak_window = dock.borrow().window.clone();
     applications.connect_clicked(move |_| {
         if let Some(window) = weak_window.upgrade() {
-            if hide {
-                window.close();
-            } else {
-                match crate::launcher::launch() {
+            match &mode {
+                ApplicationsButton::Hide => window.close(),
+                ApplicationsButton::OpenOverview(open) => open(),
+                ApplicationsButton::Show => match crate::launcher::launch() {
                     Ok(()) => window.close(),
                     Err(error) => report(error),
-                }
+                },
+                ApplicationsButton::Hidden => {}
             }
         }
     });
