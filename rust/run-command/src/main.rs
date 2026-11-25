@@ -13,6 +13,7 @@ mod panel_popup;
 mod preferences;
 mod quick_settings;
 mod run_command;
+mod session_services;
 mod workspace_dialog;
 
 use gtk::glib::ExitCode;
@@ -20,11 +21,12 @@ use gtk::prelude::*;
 use gtk::{gdk, gio, glib};
 use std::collections::HashMap;
 
-const HELP: &str = "Usage: palobar-run-command-rs <run-command | run-panel | toggle-dock | toggle-launcher | toggle-quick-settings | toggle-calendar | toggle-clipboard | prefs | lock | version>
+const HELP: &str = "Usage: palobar-rust <command>
 
 Commands
   run-command            Open the command launcher
   run-panel              Open the panel
+  run-session            Start the panel and desktop services
   toggle-dock            Toggle the standalone dock
   toggle-launcher        Toggle the applications launcher
   toggle-quick-settings  Toggle Quick Settings
@@ -33,11 +35,22 @@ Commands
   display-workspaces [MONITOR]  Open the workspace dialog
   prefs                  Open Palobar Settings
   lock                   Lock the Wayland session
+  close-popup            Close the active panel popup
+  get-active-popup       Print the active panel popup
+  get-unread-count       Print the unread notification count
+  get-bar-state          Print panel state as JSON
+  quit                   Stop the Rust session or panel
   version                Print the Palobar version";
 
 fn main() -> ExitCode {
     let mut args = std::env::args_os().skip(1);
-    let command = args.next();
+    let command = args.next().map(|command| {
+        if command == "launcher" {
+            "toggle-launcher".into()
+        } else {
+            command
+        }
+    });
     let mut args: Vec<_> = args.collect();
     let mode = command.as_deref().and_then(std::ffi::OsStr::to_str);
     if matches!(mode, Some("toggle-launcher" | "close-launcher")) && args.is_empty()
@@ -72,6 +85,12 @@ fn main() -> ExitCode {
     {
         Some("run-command") => run_command::run(),
         Some("run-panel") => bar::run(),
+        Some("run-session") => bar::run_session(),
+        Some("quit") => panel_popup::control_action("quit"),
+        Some("close-popup" | "close-popups") => panel_popup::control_action("close-popups"),
+        Some("get-active-popup" | "get-unread-count" | "get-bar-state") => {
+            panel_popup::print_state(mode.unwrap_or_default())
+        }
         Some("toggle-dock") => dock::run(),
         Some(quick_settings::ACTION) => toggle_popup(
             quick_settings::ACTION,
@@ -93,6 +112,7 @@ fn main() -> ExitCode {
         ),
         Some("prefs") => preferences::run(),
         Some("lock") => lockscreen::run(),
+        Some("request-lock") => lockscreen::request_lock(),
         Some("version") => {
             println!("{}", include_str!("../../../VERSION").trim());
             ExitCode::SUCCESS

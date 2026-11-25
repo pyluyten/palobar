@@ -136,6 +136,9 @@ fn limit(mut text: String, len: usize) -> String {
 }
 
 impl Service {
+    pub(crate) fn unread_count(&self) -> u32 {
+        self.state.borrow().unread.len() as u32
+    }
     fn update_badges(&self) {
         let count = self.state.borrow().unread.len();
         let text = count.to_string();

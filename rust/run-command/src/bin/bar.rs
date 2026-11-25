@@ -24,6 +24,8 @@ mod panel_popup;
 mod preferences;
 #[path = "../quick_settings.rs"]
 mod quick_settings;
+#[path = "../session_services.rs"]
+mod session_services;
 #[path = "../workspace_dialog.rs"]
 mod workspace_dialog;
 
@@ -33,8 +35,15 @@ fn main() -> gtk::glib::ExitCode {
         Some("prefs") => preferences::run(),
         Some(preferences::PREVIEW_COMMAND) => preferences::run_preview(&args[1..]),
         Some("lock") => lockscreen::run(),
+        Some("request-lock") => lockscreen::request_lock(),
         Some("toggle-launcher") => launcher::run(&args),
         Some("toggle-dock") => dock::run(),
+        Some("run-session") => bar::run_session(),
+        Some("quit") => panel_popup::control_action("quit"),
+        Some("close-popup" | "close-popups") => panel_popup::control_action("close-popups"),
+        Some(command @ ("get-active-popup" | "get-unread-count" | "get-bar-state")) => {
+            panel_popup::print_state(command)
+        }
         Some(workspace_dialog::ACTION) => workspace_dialog::run(&args[1..]),
         _ => bar::run(),
     }

@@ -1,6 +1,118 @@
 use gtk::prelude::*;
-use gtk::{gdk, glib};
+use gtk::{gdk, gio, glib};
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
+use std::collections::HashMap;
+use std::rc::Rc;
+
+const CONTROL_PATH: &str = "/io/Astal/Palobar/Control";
+const CONTROL_INTERFACE: &str = "io.Astal.Palobar.Control";
+
+pub(crate) fn register_state(
+    app: &gtk::Application,
+    notifications: Option<&Rc<crate::notifications::Service>>,
+) {
+    let Some(connection) = app.dbus_connection() else {
+        return;
+    };
+    let result = gio::DBusNodeInfo::for_xml(
+        r#"<node><interface name="io.Astal.Palobar.Control">
+            <method name="GetState"><arg type="s" direction="out"/><arg type="u" direction="out"/></method>
+        </interface></node>"#,
+    ).and_then(|node| {
+        let interface = node.lookup_interface(CONTROL_INTERFACE).expect("control interface");
+        let app = app.downgrade();
+        let notifications = notifications.map(Rc::downgrade);
+        connection.register_object(CONTROL_PATH, &interface)
+            .method_call(move |_, _, _, _, _, _, call| {
+                let active = app.upgrade().and_then(|app| {
+                    app.windows().into_iter().filter(|window| window.is_visible()).find_map(|window| {
+                        [
+                            ("workspace-dialog-window", "workspaces"),
+                            ("quick-settings-window", "quick-settings"),
+                            ("date-menu-window", "calendar"),
+                            ("clipboard-window", "clipboard"),
+                        ].into_iter().find_map(|(class, name)| window.has_css_class(class).then_some(name))
+                    })
+                });
+                let unread = notifications.as_ref().and_then(|service| service.upgrade())
+                    .map_or(0, |service| service.unread_count());
+                call.return_value(Some(&(active.unwrap_or(""), unread).to_variant()));
+            }).build()
+    });
+    match result {
+        Ok(id) => {
+            let registration = std::cell::Cell::new(Some(id));
+            app.connect_shutdown(move |_| {
+                if let Some(id) = registration.take() {
+                    let _ = connection.unregister_object(id);
+                }
+            });
+        }
+        Err(error) => eprintln!("[palobar] Could not register the control interface: {error}"),
+    }
+}
+
+pub(crate) fn control_action(action: &str) -> glib::ExitCode {
+    let parameters = (
+        action,
+        Vec::<glib::Variant>::new(),
+        HashMap::<String, glib::Variant>::new(),
+    );
+    let path = format!("/{}", crate::bar::APP_ID.replace('.', "/"));
+    control_call(
+        &path,
+        "org.gtk.Actions",
+        "Activate",
+        Some(&parameters.to_variant()),
+    )
+    .map_or_else(report_control_failure, |_| glib::ExitCode::SUCCESS)
+}
+
+pub(crate) fn print_state(command: &str) -> glib::ExitCode {
+    match control_call(CONTROL_PATH, CONTROL_INTERFACE, "GetState", None) {
+        Ok(reply) => {
+            let Some((active, unread)) = reply.get::<(String, u32)>() else {
+                return glib::ExitCode::FAILURE;
+            };
+            let active = (!active.is_empty()).then_some(active);
+            match command {
+                "get-active-popup" => println!("{}", active.as_deref().unwrap_or("none")),
+                "get-unread-count" => println!("{unread}"),
+                _ => println!(
+                    "{}",
+                    serde_json::json!({"active_popup": active, "unread_count": unread})
+                ),
+            }
+            glib::ExitCode::SUCCESS
+        }
+        Err(error) => report_control_failure(error),
+    }
+}
+
+fn control_call(
+    path: &str,
+    interface: &str,
+    method: &str,
+    parameters: Option<&glib::Variant>,
+) -> Result<glib::Variant, glib::Error> {
+    let connection = gio::bus_get_sync(gio::BusType::Session, gio::Cancellable::NONE)?;
+    connection.call_sync(
+        Some(crate::bar::APP_ID),
+        path,
+        interface,
+        method,
+        parameters,
+        None,
+        gio::DBusCallFlags::NO_AUTO_START,
+        1000,
+        gio::Cancellable::NONE,
+    )
+}
+
+fn report_control_failure(error: glib::Error) -> glib::ExitCode {
+    eprintln!("[palobar] Could not contact the Rust panel: {error}");
+    glib::ExitCode::FAILURE
+}
 
 pub fn show_window(
     app: &gtk::Application,

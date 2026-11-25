@@ -146,11 +146,13 @@
     };
     palobarRust = pkgs.rustPlatform.buildRustPackage {
       pname = "palobar-rust";
-      inherit (palobar) version;
+      version = pkgs.lib.removeSuffix "\n" (builtins.readFile ./VERSION);
       src = pkgs.lib.fileset.toSource {
         root = ./.;
         fileset = pkgs.lib.fileset.unions [
           ./VERSION
+          ./kdl.lang
+          ./assets/palobar-prefs.png
           ./rust/run-command/Cargo.toml
           ./rust/run-command/Cargo.lock
           ./rust/run-command/src
@@ -167,8 +169,8 @@
       preFixup = ''
         gappsWrapperArgs+=(
           --set GDK_PIXBUF_MODULE_FILE "${pixbufLoaders}"
-          --prefix PATH : "${palobar}/bin"
-          --set PALOBAR_GTKSOURCE_LANGUAGE_DIR "${palobar}/share/palobar/language-specs"
+          --set PALOBAR_GTKSOURCE_LANGUAGE_DIR "$out/share/palobar/language-specs"
+          --prefix PATH : "${pkgs.lib.makeBinPath [swaybg pkgs.swayidle]}"
           --suffix PATH : "${pkgs.lib.makeBinPath [pkgs.niri pkgs.networkmanager pkgs.wireplumber pkgs.systemd pkgs.coreutils pkgs.wl-clipboard pkgs.cliphist pkgs.cups]}"
           --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath [pkgs.pam]}"
         )
@@ -176,75 +178,24 @@
 
       postInstall = ''
         mv "$out/bin/palobar-run-command-rs" "$out/bin/palobar-rust"
-        cat > "$out/bin/palobar-rust-session" <<'EOF'
-        #!@bash@
-        set -eu
-
-        backend=
-        panel=
-        backend_ready=false
-
-        backend_status() {
-            @timeout@ 1 @palobarCtl@ get-bar-state >/dev/null 2>&1
-        }
-
-        cleanup() {
-            if [[ -n "$panel" ]]; then
-                kill "$panel" 2>/dev/null || true
-                wait "$panel" 2>/dev/null || true
-            fi
-            if [[ -n "$backend" ]]; then
-                if "$backend_ready" && kill -0 "$backend" 2>/dev/null; then
-                    @timeout@ 2 @palobarCtl@ quit >/dev/null 2>&1 || true
-                fi
-                kill "$backend" 2>/dev/null || true
-                wait "$backend" 2>/dev/null || true
-            fi
-        }
-
-        if backend_status; then
-            printf '%s\n' 'Palobar is already running. Stop it with palobar-ctl quit before starting the Rust session.' >&2
-            exit 1
-        fi
-
-        trap cleanup EXIT
-        trap 'exit 130' INT
-        trap 'exit 143' TERM
-
-        PALOBAR_RUST_COMMAND=@palobarRust@ @palobar@ &
-        backend=$!
-
-        for ((attempt = 0; attempt < 50; attempt++)); do
-            if ! kill -0 "$backend" 2>/dev/null; then
-                break
-            fi
-            if backend_status; then
-                backend_ready=true
-                break
-            fi
-            @sleep@ 0.1
-        done
-
-        if ! "$backend_ready"; then
-            printf '%s\n' 'The Palobar backend failed to start.' >&2
-            exit 1
-        fi
-
-        @palobarRust@ run-panel &
-        panel=$!
-        wait -n "$backend" "$panel"
+        install -Dm644 "$NIX_BUILD_TOP/$sourceRoot/kdl.lang" "$out/share/palobar/language-specs/kdl.lang"
+        install -Dm644 "$NIX_BUILD_TOP/$sourceRoot/assets/palobar-prefs.png" "$out/share/icons/hicolor/128x128/apps/io.Astal.palobar-prefs.png"
+        cat > "$out/bin/palobar-rust-session" <<EOF
+        #!${pkgs.runtimeShell}
+        exec "$out/bin/palobar-rust" run-session
         EOF
-        chmod +x "$out/bin/palobar-rust-session"
-        substituteInPlace "$out/bin/palobar-rust-session" \
-          --replace-fail '@bash@' '${pkgs.bash}/bin/bash' \
-          --replace-fail '@timeout@' '${pkgs.coreutils}/bin/timeout' \
-          --replace-fail '@sleep@' '${pkgs.coreutils}/bin/sleep' \
-          --replace-fail '@palobar@' '${palobar}/bin/palobar' \
-          --replace-fail '@palobarCtl@' '${palobar}/bin/palobar-ctl' \
-          --replace-fail '@palobarRust@' "$out/bin/palobar-rust"
+        cat > "$out/bin/palobar-ctl" <<EOF
+        #!${pkgs.runtimeShell}
+        if [ "\''${1:-}" = lock ] && [ "\$#" -eq 1 ]; then
+            exec "$out/bin/palobar-rust" request-lock
+        fi
+        exec "$out/bin/palobar-rust" "\$@"
+        EOF
+        chmod +x "$out/bin/palobar-rust-session" "$out/bin/palobar-ctl"
       '';
 
       meta.mainProgram = "palobar-rust";
+      meta.priority = 4;
     };
   in {
     packages.${system} = {
@@ -264,6 +215,8 @@
           pkgs.gtk4-layer-shell
           pkgs.gtksourceview5
           pkgs.gsettings-desktop-schemas
+          swaybg
+          pkgs.swayidle
         ];
         shellHook = ''
           export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath [pkgs.pam]}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"

@@ -450,6 +450,14 @@ fn build_bar(
 }
 
 pub fn run() -> gtk::glib::ExitCode {
+    run_panel(false)
+}
+
+pub fn run_session() -> gtk::glib::ExitCode {
+    run_panel(true)
+}
+
+fn run_panel(session: bool) -> gtk::glib::ExitCode {
     let initial_workspaces = query_workspaces();
     let workspaces = Arc::new(Mutex::new(initial_workspaces));
     let overview_open = Arc::new(AtomicBool::new(false));
@@ -472,6 +480,14 @@ pub fn run() -> gtk::glib::ExitCode {
         }
     });
     app.add_action(&close_popups);
+    let quit = gtk::gio::SimpleAction::new("quit", None);
+    let weak = app.downgrade();
+    quit.connect_activate(move |_, _| {
+        if let Some(app) = weak.upgrade() {
+            app.quit();
+        }
+    });
+    app.add_action(&quit);
     let state = workspaces.clone();
     app.connect_activate(move |app| {
         if !app.windows().is_empty() {
@@ -502,6 +518,10 @@ pub fn run() -> gtk::glib::ExitCode {
                 None
             }
         };
+        crate::panel_popup::register_state(app, notifications.as_ref());
+        if session {
+            crate::session_services::start(app);
+        }
         let monitors = display.monitors();
         for index in 0..monitors.n_items() {
             let Some(monitor) = monitors.item(index).and_downcast::<gdk::Monitor>() else {
@@ -516,14 +536,29 @@ pub fn run() -> gtk::glib::ExitCode {
             );
         }
     });
-    let weak = app.downgrade();
-    let terminate = gtk::glib::unix_signal_add_local(libc::SIGTERM, move || {
-        if let Some(app) = weak.upgrade() {
-            app.quit();
+    if session {
+        if let Err(error) = app.register(gtk::gio::Cancellable::NONE) {
+            eprintln!("[palobar] Could not register the session: {error}");
+            return gtk::glib::ExitCode::FAILURE;
         }
-        gtk::glib::ControlFlow::Continue
+        if app.is_remote() {
+            eprintln!("[palobar] A Rust panel is already running. Stop it with palobar-ctl quit.");
+            app.run_with_args::<&str>(&[]);
+            return gtk::glib::ExitCode::FAILURE;
+        }
+    }
+    let signals = [libc::SIGTERM, libc::SIGINT].map(|signal| {
+        let weak = app.downgrade();
+        gtk::glib::unix_signal_add_local(signal, move || {
+            if let Some(app) = weak.upgrade() {
+                app.quit();
+            }
+            gtk::glib::ControlFlow::Continue
+        })
     });
     let status = app.run_with_args::<&str>(&[]);
-    terminate.remove();
+    for signal in signals {
+        signal.remove();
+    }
     status
 }

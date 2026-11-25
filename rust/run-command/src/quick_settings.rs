@@ -861,9 +861,6 @@ pub fn toggle(app: &gtk::Application, monitor: &gdk::Monitor, indicator: Option<
         wifi_refresh.abort();
         dnd_refresh.abort();
     });
-    glib::spawn_future_local(async {
-        let _ = command(&["palobar-ctl", "close-popup"]).await;
-    });
     window.present();
 }
 

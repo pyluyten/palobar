@@ -611,7 +611,6 @@ async fn close_panel_popups() {
             )
             .await;
     }
-    let _ = crate::quick_settings::command(&["palobar-ctl", "close-popup"]).await;
 }
 
 pub fn launch() -> Result<(), String> {

@@ -314,7 +314,6 @@ pub(super) fn section(parent: &gtk::Box, window: &gtk::ApplicationWindow) -> gli
         }
     });
     glib::spawn_future_local(async move {
-        let _ = crate::quick_settings::command(&["palobar-ctl", "close-popup"]).await;
         loop {
             if !feed.busy.get() {
                 let revision = feed.revision.get();

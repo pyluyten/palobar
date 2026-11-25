@@ -1,7 +1,5 @@
 import app from "ags/gtk4/app";
 import { Gdk, Gtk } from "ags/gtk4";
-import Gio from "gi://Gio";
-import GLib from "gi://GLib";
 import AstalNotifd from "gi://AstalNotifd";
 import style from "./styles/main.scss";
 import { Bar } from "./widgets/Bar";
@@ -25,24 +23,10 @@ import { lockScreen } from "./services/lockscreen";
 import { popups } from "./services/popups";
 import { initUnreadNotifications, markNotificationsRead, unreadNotificationCount } from "./services/unread-notifications";
 
-const rustCommand = GLib.getenv("PALOBAR_RUST_COMMAND");
-const rustRequests = new Set(["run-command", "toggle-dock", "toggle-launcher", "toggle-quick-settings", "toggle-calendar", "toggle-clipboard", "display-workspaces", "lock"]);
-
 app.start({
   css: style,
   requestHandler(request, res) {
-    const cmd = rustCommand && request[0] === "launcher" ? "toggle-launcher" : request[0];
-    if (rustCommand && rustRequests.has(cmd)) {
-      try {
-        const args = cmd === "display-workspaces" && /^\d+$/.test(request[1] ?? "") ? [request[1]] : [];
-        Gio.Subprocess.new([rustCommand, cmd, ...args], Gio.SubprocessFlags.NONE);
-        res("ok");
-      } catch (error) {
-        console.error(`[palobar] Could not start Rust command ${cmd}:`, error);
-        res(`Could not start ${cmd}`);
-      }
-      return;
-    }
+    const cmd = request[0];
     if (cmd === "toggle-launcher" || cmd === "launcher") {
       toggleLauncher();
       res("ok");
@@ -82,7 +66,7 @@ app.start({
       res("ok");
       return;
     }
-    if (!rustCommand && (cmd === "get-quick-settings-dnd" || cmd === "toggle-quick-settings-dnd")) {
+    if (cmd === "get-quick-settings-dnd" || cmd === "toggle-quick-settings-dnd") {
       const notifd = AstalNotifd.get_default();
       if (cmd === "toggle-quick-settings-dnd") {
         notifd.dontDisturb = !notifd.dontDisturb;
@@ -90,7 +74,7 @@ app.start({
       res(String(notifd.dontDisturb));
       return;
     }
-    if (!rustCommand && cmd === "get-calendar-notifications") {
+    if (cmd === "get-calendar-notifications") {
       const notifd = AstalNotifd.get_default();
       markNotificationsRead();
       res(JSON.stringify({
@@ -107,7 +91,7 @@ app.start({
       }));
       return;
     }
-    if (!rustCommand && (cmd === "dismiss-calendar-notification" || cmd === "clear-calendar-notifications")) {
+    if (cmd === "dismiss-calendar-notification" || cmd === "clear-calendar-notifications") {
       const notifications = AstalNotifd.get_default().notifications;
       if (cmd === "clear-calendar-notifications") {
         for (const notification of [...notifications]) notification.dismiss();
@@ -122,27 +106,10 @@ app.start({
       return;
     }
     if (cmd === "get-unread-count" || cmd === "get-bar-state") {
-      const respond = (count: number) => res(cmd === "get-unread-count"
+      const count = unreadNotificationCount.get();
+      res(cmd === "get-unread-count"
         ? String(count)
         : JSON.stringify({ active_popup: popups.active.get(), unread_count: count }));
-      if (!rustCommand) {
-        respond(unreadNotificationCount.get());
-      } else {
-        Gio.DBus.session.call(
-          "io.Astal.Palobar.RustBar", "/io/Astal/Palobar/Notifications",
-          "io.Astal.Palobar.Notifications", "GetUnread", null, null,
-          Gio.DBusCallFlags.NO_AUTO_START, 500, null,
-          (connection, result) => {
-            let count = 0;
-            try {
-              count = connection?.call_finish(result).deep_unpack()[0] ?? 0;
-            } catch {
-              // The backend can start before the Rust panel.
-            }
-            respond(count);
-          },
-        );
-      }
       return;
     }
     if (cmd === "run-command") {
@@ -193,26 +160,20 @@ app.start({
 
     initWallpaperService();
     initPowerService();
-    if (!rustCommand) {
-      initClipboardService();
-      initOverviewCapture();
-    }
+    initClipboardService();
+    initOverviewCapture();
 
     const monitors = app.get_monitors();
-    if (!rustCommand) {
-      initUnreadNotifications();
-      monitors.forEach((monitor, index) => Bar(monitor, index));
-    }
+    initUnreadNotifications();
+    monitors.forEach((monitor, index) => Bar(monitor, index));
 
     const primary = monitors[0];
     if (primary) {
-      if (!rustCommand) {
-        CalendarPopup(primary);
-        QuickSettings(primary);
-        NotificationToasts(primary);
-        ClipboardPopup(primary);
-      }
-      if (!rustCommand) WorkspaceDialog(primary);
+      CalendarPopup(primary);
+      QuickSettings(primary);
+      NotificationToasts(primary);
+      ClipboardPopup(primary);
+      WorkspaceDialog(primary);
     }
   },
 });

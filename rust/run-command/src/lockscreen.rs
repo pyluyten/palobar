@@ -482,6 +482,19 @@ pub fn launch() -> Result<(), String> {
     start_lock(gio::SubprocessFlags::NONE).map(drop)
 }
 
+pub(crate) fn request_lock() -> glib::ExitCode {
+    match launch() {
+        Ok(()) => {
+            println!("ok");
+            glib::ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("[lockscreen] {error}");
+            glib::ExitCode::FAILURE
+        }
+    }
+}
+
 pub(crate) fn start_lock(flags: gio::SubprocessFlags) -> Result<gio::Subprocess, String> {
     let executable: PathBuf = std::env::current_exe().map_err(|error| error.to_string())?;
     gio::Subprocess::newv(&[executable.as_os_str(), OsStr::new("lock")], flags)

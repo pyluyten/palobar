@@ -562,9 +562,6 @@ pub fn toggle(app: &gtk::Application, monitor: &gdk::Monitor, indicator: Option<
             button.remove_css_class("open");
         }
     });
-    glib::spawn_future_local(async {
-        let _ = crate::quick_settings::command(&["palobar-ctl", "close-popup"]).await;
-    });
     window.present();
     search.grab_focus();
 }
