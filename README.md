@@ -62,23 +62,26 @@ If you click on the workspaces button in the top bar, niri might move the cursor
 
 ## components 
 
-* `palobar run-session` to have panel + other components
-* `palobar run-panel` imitates gnome-panel + launcher which is shown when overview is opened
-   but alone, it will not allow to use some prefs.
-* `palobar-prefs` imitates gnome-control-center and need run-session.
-* `palobar run-command` will use niri spawn-sh to run anything.
-* `palobar toggle-launcher` to activate launcher independantly from overwiew
-* `palobar toggle-dock` to show the dock on its own
+Main commands are :
+
+* `palobar run-session` (to be spawned at niri startup)
+* `palobar prefs` imitates gnome-control-center
+* `palobar run-command` (alt+f2 type)
+* `palobar toggle-launcher`
+* `palobar toggle-dock`
 * `palobar display-workspaces` or right click workspaces to view and rename workspaces
     This includes running `palobar` since you do not need it to run.
-* `palobar-ctl quit` is mostly useful for me
 
+Run `palobar` without arg to view all options. Some are for internal purpose.
 
 ### nixos
 
 under nixos (or just using nix), simply use `nix build`, `nix install` to make all components available.
 
 ### Convenience appimage
+
+<details>
+<summary>FIXME, not active since rust port</summary>
 
 an appimage is provided in git releases. Main point is you may use palobar without having to install astal which may be difficult to find.You may also build an appimage yourself reading instructions in packaging.
 
@@ -88,6 +91,8 @@ download the appimage and chmod +x then use appimage like this. Once tested, you
 `./<appimage>` ctl version to check the version or other ctl commands like listed in components
 `./<appimage>` run-commands
 `./<appimage>` prefs
+
+</details>
 
 # TODO
 
