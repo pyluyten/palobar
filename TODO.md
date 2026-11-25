@@ -16,7 +16,6 @@ ____
     - [ ] vpn
     - [x] screenshot (region)
     - [ ] bluetooth
-    - [ ] battery
 * Launcher
     - [x] text entry
     - [x] dock
@@ -75,15 +74,16 @@ More settings from "tweaks"
 
 ## Meta
 
-- Be easy to install
+- [ ] Be easy to install
   appimage proved feasible to solve the issue when ags/astal are not available.
   more testing need but "easy to install" may be solved
 
-- Change tech if too heavy or uneasy
-  gjs seems to consume 100mo *and to be stable* so rewrite seems unecessary.
-  worse case, rewrite only the bar + its widgets once stabilized.
+- [x] Change tech if too heavy or uneasy
+  gjs/astal was fine for dev & usage (slighly high ram), but
+  dependency is not suitable.
+  rewrote to pure rust gtk.
 
-- Plugins
+- [ ] Plugins
   would be nice to be able to activate or not some applets
   drop some custom css
 

@@ -1,4 +1,4 @@
-palobar is a cheap clone of GNOME visual style for niri
+palobar is a cheap clone of GNOME visual style for niri, and a niri-control-center.
 
 I am copying top bar & quick settings.
 
@@ -15,9 +15,7 @@ While in niri overview mode, typing triggers the launcher
 <details>
 <summary>Settings</summary>
 
-Settings imitate gnome-control-center
-The goal is to achieve a cheap clone and be close visually. But it is not intended to reproduce full setups. For example printers is mostly a link to cups web if you activated it.
-
+Settings imitate gnome-control-center but do not depend on GNOME tech and let you leverage existing config UI when there is. The goal is to achieve a cheap clone and be close visually. But it is not intended to reproduce full setups. For example printers is mostly a link to cups web if you activated it. Input sources is a link to fcitx/ibus. So you get all config accessible from a single place but it stays compatible with distros and services.
 
 ![prefs output](screenshot/prefs-10output.png)
 
@@ -42,12 +40,17 @@ The goal is to achieve a cheap clone and be close visually. But it is not intend
 + gsettings write what is shared by gtk
     + color scheme
     + accent color
-+ no amendment to niri config. However niri allows to temporarilly adjust a monitor.
-  This is not written.
++ no amendment to niri config but live config + kdl shown
+    + live config outputs
+    + live config mouse theme
+    + switch keyboard layout
+
 
 </details>
 
 # Usage
+
+The code is now rust and mainly depends on gtk & gtk-layer-shell.
 
 ## Niri Notes
 
@@ -86,11 +89,7 @@ download the appimage and chmod +x then use appimage like this. Once tested, you
 `./<appimage>` run-commands
 `./<appimage>` prefs
 
-# Principles / dev
-
-The code is typescript and depends on ags astal. I thought I would use gjs for a mockup but it seems to be a reasonnable choice and may stick to it.
-
-The dev is rather nix oriented and I will look at this among next steps.
+# TODO
 
 See [TODO](TODO.md).
 
