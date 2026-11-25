@@ -14,6 +14,8 @@ mod printers;
 mod security;
 #[path = "preferences/sound.rs"]
 mod sound;
+#[path = "preferences/system.rs"]
+mod system;
 
 use gtk::prelude::*;
 use gtk::{gio, glib};
@@ -152,6 +154,77 @@ fn label(text: &str, class: &str) -> gtk::Label {
         .build();
     label.add_css_class(class);
     label
+}
+
+fn fallback_page() -> gtk::Box {
+    let page = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    page.set_valign(gtk::Align::Center);
+    page.add_css_class("prefs-page-body");
+    let buttons = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    buttons.set_halign(gtk::Align::Center);
+    page.append(&buttons);
+    let status = label("", "error");
+    status.set_halign(gtk::Align::Center);
+    status.set_visible(false);
+    page.append(&status);
+
+    for (name, executable) in [
+        ("_GNOME Settings", "gnome-control-center"),
+        ("_KDE System Settings", "systemsettings"),
+        ("_Xfce Settings", "xfce4-settings-manager"),
+        ("_COSMIC Settings", "cosmic-settings"),
+    ] {
+        let button = gtk::Button::with_mnemonic(&format!("Open {name}"));
+        button.add_css_class("prefs-btn");
+        button.set_sensitive(false);
+        page.connect_map({
+            let button = button.clone();
+            move |_| {
+                let available = glib::find_program_in_path(executable).is_some();
+                let missing = format!("{executable} was not found in PATH.");
+                button.set_sensitive(available);
+                button.set_tooltip_text((!available).then_some(missing.as_str()));
+            }
+        });
+        button.connect_clicked({
+            let status = status.downgrade();
+            move |button| {
+                let Some(status_label) = status.upgrade() else {
+                    return;
+                };
+                status_label.set_visible(false);
+                let Some(path) = glib::find_program_in_path(executable) else {
+                    button.set_sensitive(false);
+                    status_label.set_text(&format!("{executable} was not found in PATH."));
+                    status_label.set_visible(true);
+                    return;
+                };
+                let launcher = gio::SubprocessLauncher::new(gio::SubprocessFlags::NONE);
+                if executable == "gnome-control-center" {
+                    launcher.setenv("XDG_CURRENT_DESKTOP", "GNOME", true);
+                }
+                match launcher.spawn(&[path.as_os_str()]) {
+                    Ok(process) => {
+                        let status = status.clone();
+                        glib::spawn_future_local(async move {
+                            if let (Err(error), Some(status)) =
+                                (process.wait_check_future().await, status.upgrade())
+                            {
+                                status.set_text(&format!("Could not open {executable}. {error}"));
+                                status.set_visible(true);
+                            }
+                        });
+                    }
+                    Err(error) => {
+                        status_label.set_text(&format!("Could not open {executable}. {error}"));
+                        status_label.set_visible(true);
+                    }
+                }
+            }
+        });
+        buttons.append(&button);
+    }
+    page
 }
 
 fn choose_image(
@@ -642,6 +715,8 @@ fn build(app: &gtk::Application) {
     stack.add_titled(&keyboard::build(&window), Some("keyboard"), "Keyboard");
     stack.add_titled(&printers::build(), Some("printers"), "Printers");
     stack.add_titled(&security::build(&window), Some("security"), "Security");
+    stack.add_titled(&system::build(&window), Some("system"), "System");
+    stack.add_titled(&fallback_page(), Some("fallback"), "Fallback");
     let pages = [
         ("output", "Output", "video-display-symbolic"),
         ("sound", "Sound", "multimedia-volume-control-symbolic"),
@@ -656,6 +731,8 @@ fn build(app: &gtk::Application) {
         ("keyboard", "Keyboard", "input-keyboard-symbolic"),
         ("printers", "Printers", "printer-symbolic"),
         ("security", "Security", "security-high-symbolic"),
+        ("system", "System", "computer-symbolic"),
+        ("fallback", "Fallback", "preferences-system-symbolic"),
     ];
     for (_, title, icon) in pages {
         let item = gtk::Box::new(gtk::Orientation::Horizontal, 10);
