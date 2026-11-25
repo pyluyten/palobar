@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 
-const FALLBACK_COLOR: &str = "#131316";
+pub(crate) const FALLBACK_COLOR: &str = "#131316";
 const CSS: &str = include_str!("lockscreen.css");
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -381,8 +381,7 @@ impl Session {
     }
 }
 
-fn run_lock() -> Result<(), String> {
-    gtk::init().map_err(|error| error.to_string())?;
+fn prerequisites() -> Result<(gdk::Display, CString, NativeLock), String> {
     let display =
         gdk::Display::default().ok_or("A Wayland display is required to lock the session.")?;
     if display.monitors().n_items() == 0 {
@@ -391,6 +390,16 @@ fn run_lock() -> Result<(), String> {
     pam::check()?;
     let user = pam::session_user()?;
     let native = NativeLock::new()?;
+    Ok((display, user, native))
+}
+
+pub(crate) fn check_support() -> Result<(), String> {
+    prerequisites().map(drop)
+}
+
+fn run_lock() -> Result<(), String> {
+    gtk::init().map_err(|error| error.to_string())?;
+    let (display, user, native) = prerequisites()?;
     let (background, color) = load_background();
     let css = gtk::CssProvider::new();
     css.load_from_data(&format!(
@@ -454,11 +463,11 @@ pub fn run() -> glib::ExitCode {
 }
 
 pub fn launch() -> Result<(), String> {
+    start_lock(gio::SubprocessFlags::NONE).map(drop)
+}
+
+pub(crate) fn start_lock(flags: gio::SubprocessFlags) -> Result<gio::Subprocess, String> {
     let executable: PathBuf = std::env::current_exe().map_err(|error| error.to_string())?;
-    gio::Subprocess::newv(
-        &[executable.as_os_str(), OsStr::new("lock")],
-        gio::SubprocessFlags::NONE,
-    )
-    .map(drop)
-    .map_err(|error| error.to_string())
+    gio::Subprocess::newv(&[executable.as_os_str(), OsStr::new("lock")], flags)
+        .map_err(|error| error.to_string())
 }

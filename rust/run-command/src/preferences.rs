@@ -10,6 +10,8 @@ mod multitask;
 mod power;
 #[path = "preferences/printers.rs"]
 mod printers;
+#[path = "preferences/security.rs"]
+mod security;
 #[path = "preferences/sound.rs"]
 mod sound;
 
@@ -150,6 +152,49 @@ fn label(text: &str, class: &str) -> gtk::Label {
         .build();
     label.add_css_class(class);
     label
+}
+
+fn choose_image(
+    window: &gtk::ApplicationWindow,
+    title: &str,
+    on_selected: impl Fn(Result<&str, &str>) + 'static,
+) {
+    if gio::SettingsSchemaSource::default()
+        .and_then(|source| source.lookup("org.gtk.gtk4.Settings.FileChooser", true))
+        .is_none()
+    {
+        on_selected(Err("The GTK file chooser settings schema is missing."));
+        return;
+    }
+    let chooser = gtk::FileChooserDialog::new(
+        Some(title),
+        Some(window),
+        gtk::FileChooserAction::Open,
+        &[
+            ("Cancel", gtk::ResponseType::Cancel),
+            ("Choose", gtk::ResponseType::Accept),
+        ],
+    );
+    chooser.set_modal(true);
+    chooser.set_destroy_with_parent(true);
+    chooser.set_default_response(gtk::ResponseType::Accept);
+    let filter = gtk::FileFilter::new();
+    filter.set_name(Some("Images"));
+    filter.add_pixbuf_formats();
+    chooser.add_filter(&filter);
+    chooser.connect_response(move |chooser, response| {
+        if response == gtk::ResponseType::Accept {
+            let filename = chooser.file().and_then(|file| file.path());
+            on_selected(
+                filename
+                    .as_deref()
+                    .and_then(|path| path.to_str())
+                    .ok_or("Choose an image with a valid local path."),
+            );
+        }
+        chooser.destroy();
+    });
+    chooser.present();
 }
 
 struct Page {
@@ -596,6 +641,7 @@ fn build(app: &gtk::Application) {
     stack.add_titled(&mouse::build(), Some("mouse"), "Mouse");
     stack.add_titled(&keyboard::build(&window), Some("keyboard"), "Keyboard");
     stack.add_titled(&printers::build(), Some("printers"), "Printers");
+    stack.add_titled(&security::build(&window), Some("security"), "Security");
     let pages = [
         ("output", "Output", "video-display-symbolic"),
         ("sound", "Sound", "multimedia-volume-control-symbolic"),
@@ -609,6 +655,7 @@ fn build(app: &gtk::Application) {
         ("mouse", "Mouse", "input-mouse-symbolic"),
         ("keyboard", "Keyboard", "input-keyboard-symbolic"),
         ("printers", "Printers", "printer-symbolic"),
+        ("security", "Security", "security-high-symbolic"),
     ];
     for (_, title, icon) in pages {
         let item = gtk::Box::new(gtk::Orientation::Horizontal, 10);

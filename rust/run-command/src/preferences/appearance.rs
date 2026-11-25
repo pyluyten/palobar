@@ -326,55 +326,22 @@ fn wallpaper(page: &gtk::Box, window: &gtk::ApplicationWindow, status: &gtk::Lab
         let window = window.downgrade();
         let state = Rc::downgrade(&state);
         move |_| {
-            let (Some(window), Some(wallpaper)) = (window.upgrade(), state.upgrade()) else {
+            let Some(window) = window.upgrade() else {
                 return;
             };
-            if gio::SettingsSchemaSource::default()
-                .and_then(|source| source.lookup("org.gtk.gtk4.Settings.FileChooser", true))
-                .is_none()
-            {
-                show_error(
-                    &wallpaper.status,
-                    Some("The GTK file chooser settings schema is missing."),
-                );
-                return;
-            }
-            let chooser = gtk::FileChooserDialog::new(
-                Some("Choose Wallpaper"),
-                Some(&window),
-                gtk::FileChooserAction::Open,
-                &[
-                    ("Cancel", gtk::ResponseType::Cancel),
-                    ("Choose", gtk::ResponseType::Accept),
-                ],
-            );
-            chooser.set_modal(true);
-            chooser.set_destroy_with_parent(true);
-            chooser.set_default_response(gtk::ResponseType::Accept);
-            let filter = gtk::FileFilter::new();
-            filter.set_name(Some("Images"));
-            filter.add_pixbuf_formats();
-            chooser.add_filter(&filter);
-            chooser.connect_response({
-                let state = state.clone();
-                move |chooser, response| {
-                    if let (gtk::ResponseType::Accept, Some(state)) = (response, state.upgrade()) {
-                        let filename = chooser.file().and_then(|file| file.path());
-                        if let Some(path) = filename.as_deref().and_then(|path| path.to_str()) {
-                            if state.save("path", path) {
-                                state.show_image(path);
+            let state = state.clone();
+            super::choose_image(&window, "Choose Wallpaper", move |result| {
+                if let Some(wallpaper) = state.upgrade() {
+                    match result {
+                        Ok(path) => {
+                            if wallpaper.save("path", path) {
+                                wallpaper.show_image(path);
                             }
-                        } else {
-                            show_error(
-                                &state.status,
-                                Some("Choose an image with a valid local path."),
-                            );
                         }
+                        Err(error) => show_error(&wallpaper.status, Some(error)),
                     }
-                    chooser.destroy();
                 }
             });
-            chooser.present();
         }
     });
     image_row.append(&choose);
