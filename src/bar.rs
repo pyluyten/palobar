@@ -542,7 +542,7 @@ fn run_panel(session: bool) -> gtk::glib::ExitCode {
             return gtk::glib::ExitCode::FAILURE;
         }
         if app.is_remote() {
-            eprintln!("[palobar] A Rust panel is already running. Stop it with palobar-ctl quit.");
+            eprintln!("[palobar] A Rust panel is already running. Stop it with palobar quit.");
             app.run_with_args::<&str>(&[]);
             return gtk::glib::ExitCode::FAILURE;
         }

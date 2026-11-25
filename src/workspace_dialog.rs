@@ -718,7 +718,7 @@ pub fn run(args: &[OsString]) -> glib::ExitCode {
         _ => None,
     };
     let Some(index) = index else {
-        eprintln!("Usage: palobar-rust display-workspaces [MONITOR]");
+        eprintln!("Usage: palobar display-workspaces [MONITOR]");
         return glib::ExitCode::FAILURE;
     };
     let panel_id = crate::bar::APP_ID;
@@ -762,5 +762,5 @@ pub fn run(args: &[OsString]) -> glib::ExitCode {
             .unwrap_or_default();
         open_monitor(app, index)
     });
-    app.run_with_args(&["palobar-rust", &index.to_string()])
+    app.run_with_args(&["palobar", &index.to_string()])
 }

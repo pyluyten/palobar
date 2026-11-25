@@ -27,8 +27,8 @@
       cups
     ];
 
-    palobarRust = pkgs.rustPlatform.buildRustPackage {
-      pname = "palobar-rust";
+    palobar = pkgs.rustPlatform.buildRustPackage {
+      pname = "palobar";
       version = pkgs.lib.removeSuffix "\n" (builtins.readFile ./VERSION);
       src = pkgs.lib.fileset.toSource {
         root = ./.;
@@ -42,7 +42,6 @@
         ];
       };
       cargoLock.lockFile = ./Cargo.lock;
-      cargoBuildFlags = ["--bin" "palobar-run-command-rs"];
 
       nativeBuildInputs = [pkgs.pkg-config pkgs.wrapGAppsHook4];
       buildInputs = [pkgs.gtk4 pkgs.gtk4-layer-shell pkgs.gtksourceview5 pkgs.gsettings-desktop-schemas];
@@ -58,24 +57,11 @@
       '';
 
       postInstall = ''
-        mv "$out/bin/palobar-run-command-rs" "$out/bin/palobar-rust"
         install -Dm644 "$NIX_BUILD_TOP/$sourceRoot/kdl.lang" "$out/share/palobar/language-specs/kdl.lang"
         install -Dm644 "$NIX_BUILD_TOP/$sourceRoot/assets/palobar-prefs.png" "$out/share/icons/hicolor/128x128/apps/io.Astal.palobar-prefs.png"
-        cat > "$out/bin/palobar-rust-session" <<EOF
-        #!${pkgs.runtimeShell}
-        exec "$out/bin/palobar-rust" run-session
-        EOF
-        cat > "$out/bin/palobar-ctl" <<EOF
-        #!${pkgs.runtimeShell}
-        if [ "\''${1:-}" = lock ] && [ "\$#" -eq 1 ]; then
-            exec "$out/bin/palobar-rust" request-lock
-        fi
-        exec "$out/bin/palobar-rust" "\$@"
-        EOF
-        chmod +x "$out/bin/palobar-rust-session" "$out/bin/palobar-ctl"
       '';
 
-      meta.mainProgram = "palobar-rust";
+      meta.mainProgram = "palobar";
       meta.priority = 4;
     };
     rustShell = pkgs.mkShell {
@@ -98,8 +84,8 @@
 
   in {
     packages.${system} = {
-      default = palobarRust;
-      palobar-rust = palobarRust;
+      default = palobar;
+      inherit palobar;
     };
 
     devShells.${system} = {

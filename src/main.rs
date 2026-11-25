@@ -21,7 +21,7 @@ use gtk::prelude::*;
 use gtk::{gdk, gio, glib};
 use std::collections::HashMap;
 
-const HELP: &str = "Usage: palobar-rust <command>
+const HELP: &str = "Usage: palobar <command>
 
 Commands
   run-command            Open the command launcher
@@ -35,6 +35,7 @@ Commands
   display-workspaces [MONITOR]  Open the workspace dialog
   prefs                  Open Palobar Settings
   lock                   Lock the Wayland session
+  request-lock           Request locking and return immediately
   close-popup            Close the active panel popup
   get-active-popup       Print the active panel popup
   get-unread-count       Print the unread notification count

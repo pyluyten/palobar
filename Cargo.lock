@@ -582,7 +582,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "palobar-run-command-rs"
+name = "palobar"
 version = "0.1.0"
 dependencies = [
  "chrono",

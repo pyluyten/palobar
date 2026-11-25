@@ -747,7 +747,7 @@ pub fn run(args: &[OsString]) -> glib::ExitCode {
         let (mode, monitor, query) = arguments(&args[1..]);
         request(app, mode, monitor, query)
     });
-    let argv: Vec<_> = std::iter::once("palobar-rust".into())
+    let argv: Vec<_> = std::iter::once("palobar".into())
         .chain(args.iter().map(|arg| arg.to_string_lossy()))
         .collect();
     app.run_with_args(&argv)
