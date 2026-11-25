@@ -1,5 +1,5 @@
 use crate::{
-    calendar, clipboard, launcher, notifications, overview, quick_settings, workspace_dialog,
+    calendar, clipboard, launcher, notifications, overview, quick_settings, tray, workspace_dialog,
 };
 use chrono::Local;
 use gtk::gdk;
@@ -279,6 +279,7 @@ fn build_bar(
     index: u32,
     workspaces: Arc<Mutex<Vec<Workspace>>>,
     notifications: Option<&notifications::Service>,
+    tray: Option<&tray::Tray>,
 ) {
     let window = ApplicationWindow::builder()
         .application(app)
@@ -395,6 +396,9 @@ fn build_bar(
             clipboard::toggle(&app, &target_monitor, Some(button));
         }
     });
+    if let Some(tray) = tray {
+        right.append(&tray.widget());
+    }
     right.append(&clipboard);
     right.append(&system_menu);
 
@@ -488,6 +492,16 @@ fn run_panel(session: bool) -> gtk::glib::ExitCode {
         }
     });
     app.add_action(&quit);
+    let tray = std::rc::Rc::new(std::cell::OnceCell::new());
+    app.connect_startup({
+        let tray = tray.clone();
+        move |app| {
+            let service = tray::start(app)
+                .map_err(|error| eprintln!("[tray] {error}"))
+                .ok();
+            let _ = tray.set(service);
+        }
+    });
     let state = workspaces.clone();
     app.connect_activate(move |app| {
         if !app.windows().is_empty() {
@@ -522,6 +536,7 @@ fn run_panel(session: bool) -> gtk::glib::ExitCode {
         if session {
             crate::session_services::start(app);
         }
+        let tray = tray.get().and_then(Option::as_ref);
         let monitors = display.monitors();
         for index in 0..monitors.n_items() {
             let Some(monitor) = monitors.item(index).and_downcast::<gdk::Monitor>() else {
@@ -533,6 +548,7 @@ fn run_panel(session: bool) -> gtk::glib::ExitCode {
                 index,
                 state.clone(),
                 notifications.as_deref(),
+                tray,
             );
         }
     });

@@ -14,6 +14,7 @@ mod preferences;
 mod quick_settings;
 mod run_command;
 mod session_services;
+mod tray;
 mod workspace_dialog;
 
 use gtk::glib::ExitCode;
