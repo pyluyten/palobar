@@ -313,7 +313,7 @@ fn populate(page: &gtk::Box, window: &gtk::ApplicationWindow) {
                 ("Niri Version", niri),
                 (
                     "Palobar Version",
-                    Some(include_str!("../../../../VERSION").trim().to_owned()),
+                    Some(include_str!("../../VERSION").trim().to_owned()),
                 ),
                 ("Windowing System", windowing),
                 ("Kernel Version", read_text("/proc/sys/kernel/osrelease")),

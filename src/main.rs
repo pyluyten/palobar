@@ -114,7 +114,7 @@ fn main() -> ExitCode {
         Some("lock") => lockscreen::run(),
         Some("request-lock") => lockscreen::request_lock(),
         Some("version") => {
-            println!("{}", include_str!("../../../VERSION").trim());
+            println!("{}", include_str!("../VERSION").trim());
             ExitCode::SUCCESS
         }
         None | Some("--help" | "-h") => {

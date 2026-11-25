@@ -444,7 +444,7 @@ impl Service {
                 &(
                     "Palobar",
                     "Palobar",
-                    include_str!("../../../VERSION").trim(),
+                    include_str!("../VERSION").trim(),
                     "1.3",
                 )
                     .to_variant(),

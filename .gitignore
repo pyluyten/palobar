@@ -2,7 +2,7 @@ node_modules/
 @girs/
 dist/
 result
-/rust/run-command/target/
+/target/
 *.log
 nprnpa.sh
 AGENTS-local.md

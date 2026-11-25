@@ -80,12 +80,8 @@ pub(super) fn build(window: &gtk::ApplicationWindow) -> gtk::Box {
 
     sourceview5::init();
     let languages = sourceview5::LanguageManager::new();
-    let language_dir = std::env::var("PALOBAR_GTKSOURCE_LANGUAGE_DIR").unwrap_or_else(|_| {
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../..")
-            .display()
-            .to_string()
-    });
+    let language_dir = std::env::var("PALOBAR_GTKSOURCE_LANGUAGE_DIR")
+        .unwrap_or_else(|_| env!("CARGO_MANIFEST_DIR").to_owned());
     let defaults = languages.search_path();
     let search_path: Vec<&str> = std::iter::once(language_dir.as_str())
         .chain(defaults.iter().map(|dir| dir.as_str()))
