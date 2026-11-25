@@ -24,6 +24,8 @@ mod panel_popup;
 mod preferences;
 #[path = "../quick_settings.rs"]
 mod quick_settings;
+#[path = "../workspace_dialog.rs"]
+mod workspace_dialog;
 
 fn main() -> gtk::glib::ExitCode {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
@@ -33,6 +35,7 @@ fn main() -> gtk::glib::ExitCode {
         Some("lock") => lockscreen::run(),
         Some("toggle-launcher") => launcher::run(&args),
         Some("toggle-dock") => dock::run(),
+        Some(workspace_dialog::ACTION) => workspace_dialog::run(&args[1..]),
         _ => bar::run(),
     }
 }

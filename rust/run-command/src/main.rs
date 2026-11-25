@@ -13,6 +13,7 @@ mod panel_popup;
 mod preferences;
 mod quick_settings;
 mod run_command;
+mod workspace_dialog;
 
 use gtk::glib::ExitCode;
 use gtk::prelude::*;
@@ -29,6 +30,7 @@ Commands
   toggle-quick-settings  Toggle Quick Settings
   toggle-calendar        Toggle Calendar and Notifications
   toggle-clipboard       Toggle Clipboard History
+  display-workspaces [MONITOR]  Open the workspace dialog
   prefs                  Open Palobar Settings
   lock                   Lock the Wayland session
   version                Print the Palobar version";
@@ -55,6 +57,9 @@ fn main() -> ExitCode {
     }
     if mode == Some(preferences::PREVIEW_COMMAND) {
         return preferences::run_preview(&args);
+    }
+    if mode == Some(workspace_dialog::ACTION) {
+        return workspace_dialog::run(&args);
     }
     if !args.is_empty() {
         eprintln!("{HELP}");

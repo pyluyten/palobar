@@ -1,4 +1,6 @@
-use crate::{calendar, clipboard, launcher, notifications, overview, quick_settings};
+use crate::{
+    calendar, clipboard, launcher, notifications, overview, quick_settings, workspace_dialog,
+};
 use chrono::Local;
 use gtk::gdk;
 use gtk::prelude::*;
@@ -30,18 +32,6 @@ struct Workspace {
     is_focused: bool,
     #[serde(default)]
     is_urgent: bool,
-}
-
-fn open_workspace_dialog(monitor_index: u32) {
-    let index = monitor_index.to_string();
-    thread::spawn(move || {
-        if let Err(error) = Command::new("palobar-ctl")
-            .args(["display-workspaces", &index])
-            .status()
-        {
-            eprintln!("[rust-bar] could not open workspace dialog: {error}");
-        }
-    });
 }
 
 pub fn send_niri_action(action: &str, args: &[&str]) {
@@ -317,9 +307,15 @@ fn build_bar(
     let right_click = GestureClick::new();
     right_click.set_button(gdk::BUTTON_SECONDARY);
     right_click.set_propagation_phase(gtk::PropagationPhase::Capture);
-    right_click.connect_pressed(move |gesture, _, _, _| {
-        gesture.set_state(gtk::EventSequenceState::Claimed);
-        open_workspace_dialog(index);
+    right_click.connect_pressed({
+        let app = app.downgrade();
+        let monitor = monitor.clone();
+        move |gesture, _, _, _| {
+            gesture.set_state(gtk::EventSequenceState::Claimed);
+            if let Some(app) = app.upgrade() {
+                workspace_dialog::open(&app, &monitor);
+            }
+        }
     });
     workspace_box.add_controller(right_click);
 
@@ -464,6 +460,7 @@ pub fn run() -> gtk::glib::ExitCode {
     calendar::register_panel_action(&app);
     clipboard::register_panel_action(&app);
     launcher::register_panel_action(&app);
+    workspace_dialog::register_panel_action(&app);
     let close_popups = gtk::gio::SimpleAction::new("close-popups", None);
     let weak_app = app.downgrade();
     close_popups.connect_activate(move |_, _| {
@@ -471,6 +468,7 @@ pub fn run() -> gtk::glib::ExitCode {
             calendar::close(&app);
             clipboard::close(&app);
             quick_settings::close(&app);
+            workspace_dialog::close(&app);
         }
     });
     app.add_action(&close_popups);
@@ -489,6 +487,7 @@ pub fn run() -> gtk::glib::ExitCode {
         clipboard::install_style(&display);
         clipboard::start_watcher(app);
         launcher::install_style(&display);
+        workspace_dialog::install_style(&display);
         overview::install(app, &display, overview_open.clone());
         let provider = style_provider();
         gtk::style_context_add_provider_for_display(

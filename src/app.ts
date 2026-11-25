@@ -26,7 +26,7 @@ import { popups } from "./services/popups";
 import { initUnreadNotifications, markNotificationsRead, unreadNotificationCount } from "./services/unread-notifications";
 
 const rustCommand = GLib.getenv("PALOBAR_RUST_COMMAND");
-const rustRequests = new Set(["run-command", "toggle-dock", "toggle-launcher", "toggle-quick-settings", "toggle-calendar", "toggle-clipboard", "lock"]);
+const rustRequests = new Set(["run-command", "toggle-dock", "toggle-launcher", "toggle-quick-settings", "toggle-calendar", "toggle-clipboard", "display-workspaces", "lock"]);
 
 app.start({
   css: style,
@@ -34,7 +34,8 @@ app.start({
     const cmd = rustCommand && request[0] === "launcher" ? "toggle-launcher" : request[0];
     if (rustCommand && rustRequests.has(cmd)) {
       try {
-        Gio.Subprocess.new([rustCommand, cmd], Gio.SubprocessFlags.NONE);
+        const args = cmd === "display-workspaces" && /^\d+$/.test(request[1] ?? "") ? [request[1]] : [];
+        Gio.Subprocess.new([rustCommand, cmd, ...args], Gio.SubprocessFlags.NONE);
         res("ok");
       } catch (error) {
         console.error(`[palobar] Could not start Rust command ${cmd}:`, error);
@@ -211,7 +212,7 @@ app.start({
         NotificationToasts(primary);
         ClipboardPopup(primary);
       }
-      WorkspaceDialog(primary);
+      if (!rustCommand) WorkspaceDialog(primary);
     }
   },
 });

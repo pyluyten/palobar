@@ -438,6 +438,7 @@ pub fn toggle(app: &gtk::Application, monitor: &gdk::Monitor, indicator: Option<
     }
     crate::calendar::close(app);
     crate::quick_settings::close(app);
+    crate::workspace_dialog::close(app);
     let window = gtk::ApplicationWindow::builder()
         .application(app)
         .title("Clipboard")
