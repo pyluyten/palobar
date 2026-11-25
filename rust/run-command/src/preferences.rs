@@ -1,11 +1,15 @@
 #[path = "preferences/appearance.rs"]
 mod appearance;
+#[path = "preferences/keyboard.rs"]
+mod keyboard;
 #[path = "preferences/mouse.rs"]
 mod mouse;
 #[path = "preferences/multitask.rs"]
 mod multitask;
 #[path = "preferences/power.rs"]
 mod power;
+#[path = "preferences/printers.rs"]
+mod printers;
 #[path = "preferences/sound.rs"]
 mod sound;
 
@@ -590,6 +594,8 @@ fn build(app: &gtk::Application) {
         "Appearance",
     );
     stack.add_titled(&mouse::build(), Some("mouse"), "Mouse");
+    stack.add_titled(&keyboard::build(&window), Some("keyboard"), "Keyboard");
+    stack.add_titled(&printers::build(), Some("printers"), "Printers");
     let pages = [
         ("output", "Output", "video-display-symbolic"),
         ("sound", "Sound", "multimedia-volume-control-symbolic"),
@@ -601,6 +607,8 @@ fn build(app: &gtk::Application) {
             "preferences-desktop-wallpaper-symbolic",
         ),
         ("mouse", "Mouse", "input-mouse-symbolic"),
+        ("keyboard", "Keyboard", "input-keyboard-symbolic"),
+        ("printers", "Printers", "printer-symbolic"),
     ];
     for (_, title, icon) in pages {
         let item = gtk::Box::new(gtk::Orientation::Horizontal, 10);

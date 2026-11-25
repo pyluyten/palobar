@@ -161,7 +161,7 @@
         gappsWrapperArgs+=(
           --prefix PATH : "${palobar}/bin"
           --set PALOBAR_GTKSOURCE_LANGUAGE_DIR "${palobar}/share/palobar/language-specs"
-          --suffix PATH : "${pkgs.lib.makeBinPath [pkgs.niri pkgs.networkmanager pkgs.wireplumber pkgs.systemd pkgs.coreutils pkgs.wl-clipboard pkgs.cliphist]}"
+          --suffix PATH : "${pkgs.lib.makeBinPath [pkgs.niri pkgs.networkmanager pkgs.wireplumber pkgs.systemd pkgs.coreutils pkgs.wl-clipboard pkgs.cliphist pkgs.cups]}"
           --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath [pkgs.pam]}"
         )
       '';
