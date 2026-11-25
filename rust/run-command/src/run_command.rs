@@ -1,6 +1,6 @@
 use crate::history;
-use gtk::{gdk, gio, glib};
 use gtk::prelude::*;
+use gtk::{gdk, gio, glib};
 use gtk::{
     Application, ApplicationWindow, Box as GtkBox, CssProvider, Entry, EntryIconPosition,
     EventControllerKey, GestureClick, Label, ListBox, ListBoxRow, Orientation, SelectionMode,
@@ -471,15 +471,13 @@ fn build_window(app: &Application) {
     });
     window.add_controller(close_keys);
 
+    window.present();
+    entry.grab_focus();
+}
+
+fn install_style(app: &Application) {
     let provider = CssProvider::new();
-    provider.load_from_data(
-        ".run-command-overlay { background: rgba(0, 0, 0, 0.28); }\
-         .run-command-entry { padding: 14px 18px; border-radius: 18px; }\
-         .run-completions { background: rgba(30, 30, 34, 0.94); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 6px; }\
-         .run-completion-row { border-radius: 10px; padding: 6px 12px; }\
-         .run-completion-row:selected { background: rgba(255,255,255,0.12); }\
-         .run-completion-label { font-family: monospace; font-size: 13px; }",
-    );
+    provider.load_from_data(include_str!("run_command.css"));
     if let Some(display) = gdk::Display::default() {
         gtk::style_context_add_provider_for_display(
             &display,
@@ -496,9 +494,10 @@ fn build_window(app: &Application) {
         {
             let accent_provider = CssProvider::new();
             let update_accent = |settings: &gtk::gio::Settings, provider: &CssProvider| {
+                let accent = accent_color(settings);
                 provider.load_from_data(&format!(
-                    "entry.run-command-terminal image {{ color: {}; }}",
-                    accent_color(settings)
+                    "entry.run-command-entry:focus-within {{ border-color: {accent}; }}
+                     entry.run-command-terminal image {{ color: {accent}; }}"
                 ));
             };
             update_accent(&settings, &accent_provider);
@@ -516,13 +515,11 @@ fn build_window(app: &Application) {
             });
         }
     }
-
-    window.present();
-    entry.grab_focus();
 }
 
 pub fn run() -> gtk::glib::ExitCode {
     let app = Application::builder().application_id(APP_ID).build();
+    app.connect_startup(install_style);
     app.connect_activate(build_window);
     app.run_with_args::<&str>(&[])
 }

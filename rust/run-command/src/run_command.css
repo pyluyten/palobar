@@ -1,0 +1,43 @@
+window.run-command-overlay {
+  background-color: rgba(22, 22, 26, 0.90);
+  color: #f6f5f4;
+  font-family: Cantarell, Inter, sans-serif;
+}
+
+entry.run-command-entry {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  box-shadow: none;
+  color: #f6f5f4;
+  font-size: 14px;
+  min-height: 32px;
+  padding: 4px 16px;
+}
+
+entry.run-command-entry:focus-within {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: #3584e4;
+  outline: none;
+}
+
+entry.run-command-entry placeholder { color: rgba(246, 245, 244, 0.65); }
+
+.run-completions {
+  background-color: rgba(30, 30, 34, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.run-completion-row {
+  border-radius: 10px;
+  padding: 6px 12px;
+  color: #f6f5f4;
+}
+
+.run-completion-row:selected,
+.run-completion-row:hover { background-color: rgba(255, 255, 255, 0.12); }
+
+.run-completion-label { font-family: monospace; font-size: 13px; }

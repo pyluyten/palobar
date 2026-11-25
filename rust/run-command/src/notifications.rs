@@ -339,6 +339,7 @@ impl Service {
                 .icon_name("window-close-symbolic")
                 .tooltip_text("Hide Notification")
                 .build();
+            dismiss.add_css_class("notification-toast-dismiss");
             let weak = Rc::downgrade(self);
             dismiss.connect_clicked(move |_| {
                 if let Some(service) = weak.upgrade() {
@@ -673,7 +674,15 @@ pub fn start(app: &gtk::Application, display: &gdk::Display) -> Result<Rc<Servic
         "window.notification-toast-window { background: transparent; }
         .notification-toast-card { background: #333; color: #f6f5f4; min-width: 330px;
         border-radius: 18px; border: 1px solid rgba(255,255,255,0.12); padding: 12px; }
-        .notification-toast-title { font-weight: 700; }",
+        .notification-toast-title { font-weight: 700; }
+        .notification-toast-card button.notification-toast-dismiss {
+            background: transparent; border: none; border-radius: 999px;
+            box-shadow: none; padding: 2px 4px; color: rgba(246, 245, 244, 0.65);
+        }
+        .notification-toast-card button.notification-toast-dismiss:hover,
+        .notification-toast-card button.notification-toast-dismiss:active {
+            background-color: rgba(255, 255, 255, 0.12); color: #f6f5f4;
+        }",
     );
     gtk::style_context_add_provider_for_display(
         display,
