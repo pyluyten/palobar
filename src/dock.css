@@ -1,0 +1,38 @@
+window.standalone-dock {
+  background: transparent;
+  color: #f6f5f4;
+  font-family: "Cantarell", "Inter", sans-serif;
+  font-size: 13.5px;
+}
+
+.dock {
+  background: rgba(51, 51, 51, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 33px;
+  padding: 12px 21px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.dock-menu > contents,
+.dock-menu > arrow {
+  background: #333;
+  color: #f6f5f4;
+}
+
+.dock-item,
+.dock-menu button {
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: none;
+  border: none;
+  color: #f6f5f4;
+}
+
+.dock-item:hover,
+.dock-menu button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.dock-menu button { padding: 6px 12px; }
+.dock-menu button:disabled { color: #aaa; }
+.dock-item { border-radius: 21px; padding: 9px 12px; }
+.dock-dot { background: rgba(255, 255, 255, 0.85); border-radius: 999px; }

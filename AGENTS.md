@@ -9,9 +9,7 @@ Code comments needs to be English too , it is not yet the case.
 techno
 ______
 
-TypeScript, ags, Astal
-
-this tech is comptatible with rather low resource usage.
+Rust, GTK4, and gtk4-layer-shell
 
 *beware to handle memory usage at every code change. palobar needs to keep its memory usage the same no matter how long it runs*
 

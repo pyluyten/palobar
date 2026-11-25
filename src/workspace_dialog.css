@@ -1,0 +1,33 @@
+window.workspace-dialog-window { background: transparent; }
+.workspace-dialog {
+  background-color: #121214;
+  color: #f6f5f4;
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 16px;
+  padding: 14px;
+}
+.workspace-dialog-title { font-size: 16px; font-weight: 700; }
+.workspace-dialog button.workspace-dialog-button,
+.workspace-dialog button.workspace-window-tile {
+  background: rgba(255,255,255,0.07);
+  color: #f6f5f4;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  box-shadow: none;
+}
+.workspace-dialog button.workspace-dialog-button { padding: 3px 10px; }
+.workspace-dialog button.workspace-window-tile { padding: 8px; }
+.workspace-dialog button.workspace-dialog-button:hover,
+.workspace-dialog button.workspace-window-tile:hover { background: rgba(255,255,255,0.15); }
+.workspace-dialog-row {
+  background-color: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+}
+.workspace-dialog-header {
+  border-bottom: 1px solid rgba(255,255,255,0.12);
+  padding: 6px 10px;
+  font-weight: 600;
+}
+.workspace-dialog-columns { min-height: 64px; padding: 12px; }
+.workspace-dialog-status { color: rgba(246,245,244,0.78); }

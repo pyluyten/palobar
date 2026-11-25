@@ -1,159 +1,96 @@
 {
-  description = "palobar - GNOME Shell-like desktop shell for niri using Astal + TypeScript";
+  description = "palobar - GNOME Shell-like desktop shell for niri using Rust and GTK4";
 
-  inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    ags = {
-      url = "github:aylur/ags";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-  };
+  inputs.nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
 
-  outputs = {
-    self,
-    nixpkgs,
-    ags,
-  }: let
+  outputs = {nixpkgs, ...}: let
     system = "x86_64-linux";
     pkgs = nixpkgs.legacyPackages.${system};
-    agsPackages = ags.packages.${system};
-
-    astalDeps = with agsPackages; [
-      astal4
-      io
-      apps
-      auth
-      battery
-      mpris
-      network
-      notifd
-      tray
+    pixbufLoaders = pkgs.runCommand "palobar-pixbuf-loaders.cache" {} ''
+      cat ${pkgs.gdk-pixbuf}/${pkgs.gdk-pixbuf.binaryDir}/loaders.cache \
+        ${pkgs.webp-pixbuf-loader}/${pkgs.gdk-pixbuf.binaryDir}/webp-loaders.cache > "$out"
+    '';
+    swaybg = pkgs.swaybg.overrideAttrs (old: {
+      postInstall = (old.postInstall or "") + ''
+        export GDK_PIXBUF_MODULE_FILE="${pixbufLoaders}"
+      '';
+    });
+    desktopTools = [swaybg pkgs.swayidle];
+    runtimeTools = with pkgs; [
+      niri
+      networkmanager
       wireplumber
+      systemd
+      coreutils
+      wl-clipboard
+      cliphist
+      cups
     ];
 
-    agsWithDeps = agsPackages.default.override {
-      extraPackages = astalDeps;
-    };
-
-    palobar = pkgs.stdenv.mkDerivation {
+    palobar = pkgs.rustPlatform.buildRustPackage {
       pname = "palobar";
       version = pkgs.lib.removeSuffix "\n" (builtins.readFile ./VERSION);
-      src = ./.;
+      src = pkgs.lib.fileset.toSource {
+        root = ./.;
+        fileset = pkgs.lib.fileset.unions [
+          ./VERSION
+          ./kdl.lang
+          ./assets/palobar-prefs.png
+          ./Cargo.toml
+          ./Cargo.lock
+          ./src
+        ];
+      };
+      cargoLock.lockFile = ./Cargo.lock;
 
-      nativeBuildInputs = [
-        pkgs.wrapGAppsHook4
-        pkgs.gobject-introspection
-        pkgs.makeWrapper
-        agsWithDeps
-      ];
+      nativeBuildInputs = [pkgs.pkg-config pkgs.wrapGAppsHook4];
+      buildInputs = [pkgs.gtk4 pkgs.gtk4-layer-shell pkgs.gtksourceview5 pkgs.gsettings-desktop-schemas];
 
-      buildInputs =
-        [
-          pkgs.gjs
-          pkgs.gtk4
-          pkgs.gsettings-desktop-schemas
-          pkgs.gtk4-layer-shell
-          pkgs.gtksourceview5
-          pkgs.dart-sass
-          pkgs.swaybg
-          pkgs.swayidle
-          pkgs.wl-clipboard
-          pkgs.cliphist
-          pkgs.networkmanager
-        ]
-        ++ astalDeps;
+      preFixup = ''
+        gappsWrapperArgs+=(
+          --set GDK_PIXBUF_MODULE_FILE "${pixbufLoaders}"
+          --set PALOBAR_GTKSOURCE_LANGUAGE_DIR "$out/share/palobar/language-specs"
+          --prefix PATH : "${pkgs.lib.makeBinPath desktopTools}"
+          --suffix PATH : "${pkgs.lib.makeBinPath runtimeTools}"
+          --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath [pkgs.pam]}"
+        )
+      '';
 
-      installPhase = ''
-        runHook preInstall
-        export HOME=$(mktemp -d)
-        mkdir -p $out/bin
-        install -Dm644 kdl.lang $out/share/palobar/language-specs/kdl.lang
-        install -Dm644 VERSION $out/share/palobar/version
+      postInstall = ''
+        install -Dm644 "$NIX_BUILD_TOP/$sourceRoot/kdl.lang" "$out/share/palobar/language-specs/kdl.lang"
+        install -Dm644 "$NIX_BUILD_TOP/$sourceRoot/assets/palobar-prefs.png" "$out/share/icons/hicolor/128x128/apps/io.Astal.palobar-prefs.png"
+      '';
 
-        ags bundle src/prefs.ts $out/bin/palobar-prefs
-        ags bundle src/run-command.ts $out/bin/palobar-run-command
-        ags bundle src/app.ts $out/bin/.palobar-bin
-
-        install -Dm644 assets/palobar-prefs.png $out/share/icons/hicolor/128x128/apps/io.Astal.palobar-prefs.png
-        mkdir -p $out/share/applications
-        cat > $out/share/applications/io.Astal.palobar-prefs.desktop <<EOF
-        [Desktop Entry]
-        Type=Application
-        Name=Palobar Settings
-        Exec=$out/bin/palobar-prefs
-        Icon=io.Astal.palobar-prefs
-        NoDisplay=true
-        EOF
-
-        # Keep the standard GTK loaders alongside the WebP loader for previews.
-        mkdir -p $out/share/palobar
-        cat "$GDK_PIXBUF_MODULE_FILE" \
-          ${pkgs.webp-pixbuf-loader}/${pkgs.gdk-pixbuf.binaryDir}/webp-loaders.cache \
-          > $out/share/palobar/loaders.cache
-        export GDK_PIXBUF_MODULE_FILE="$out/share/palobar/loaders.cache"
-
-        wrapProgram $out/bin/palobar-prefs \
-          --set PALOBAR_VERSION_FILE $out/share/palobar/version \
-          --set PALOBAR_GTKSOURCE_LANGUAGE_DIR $out/share/palobar/language-specs \
-          --prefix PATH : $out/bin \
-          --prefix PATH : ${pkgs.lib.makeBinPath [pkgs.bash]}
-
-        wrapProgram $out/bin/.palobar-bin \
-          --prefix PATH : $out/bin \
-          --prefix PATH : ${pkgs.lib.makeBinPath [pkgs.swaybg pkgs.swayidle pkgs.wl-clipboard pkgs.cliphist pkgs.networkmanager]}
-
-        cat > $out/bin/palobar-ctl <<EOF
-        #!${pkgs.runtimeShell}
-        case "\''${1:-}" in
-          "")
-            printf '%s\n' 'Usage: palobar-ctl {quit|toggle-launcher|toggle-dock|display-workspaces|version}'
-            exit 0
-            ;;
-          version)
-            printf '%s\n' '$version'
-            exit 0
-            ;;
-        esac
-        if ${agsWithDeps}/bin/ags request "\$@" 2>/dev/null; then
-          exit 0
-        fi
-        if [ "\''${1:-}" = "run-command" ]; then
-          exec $out/bin/palobar-run-command
-        fi
-        exec ${agsWithDeps}/bin/ags request "\$@"
-        EOF
-        chmod +x $out/bin/palobar-ctl
-
-        cat > $out/bin/palobar <<EOF
-        #!${pkgs.runtimeShell}
-        if [ "\''${1:-}" = "ctl" ]; then
-          shift
-          exec $out/bin/palobar-ctl "\$@"
-        fi
-        exec $out/bin/.palobar-bin "\$@"
-        EOF
-        chmod +x $out/bin/palobar
-
-        runHook postInstall
+      meta.mainProgram = "palobar";
+      meta.priority = 4;
+    };
+    rustShell = pkgs.mkShell {
+      GDK_PIXBUF_MODULE_FILE = "${pixbufLoaders}";
+      packages = [
+        pkgs.cargo
+        pkgs.rustc
+        pkgs.rustfmt
+        pkgs.pkg-config
+        pkgs.gtk4
+        pkgs.gtk4-layer-shell
+        pkgs.gtksourceview5
+        pkgs.gsettings-desktop-schemas
+      ] ++ desktopTools;
+      shellHook = ''
+        export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath [pkgs.pam]}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+        export PATH="$PATH:${pkgs.lib.makeBinPath runtimeTools}"
       '';
     };
-  in {
-    packages.${system}.default = palobar;
 
-    devShells.${system}.default = pkgs.mkShell {
-      PALOBAR_GTKSOURCE_LANGUAGE_DIR = "${self}";
-      PALOBAR_VERSION_FILE = "${self}/VERSION";
-      packages = [
-        agsWithDeps
-        pkgs.nodejs
-        pkgs.typescript
-        pkgs.gtksourceview5
-        pkgs.dart-sass
-        pkgs.swaybg
-        pkgs.swayidle
-        pkgs.wl-clipboard
-        pkgs.cliphist
-      ];
+  in {
+    packages.${system} = {
+      default = palobar;
+      inherit palobar;
+    };
+
+    devShells.${system} = {
+      default = rustShell;
+      rust = rustShell;
     };
   };
 }
