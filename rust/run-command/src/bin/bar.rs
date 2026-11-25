@@ -1,3 +1,5 @@
+#[path = "../background.rs"]
+mod background;
 #[path = "../bar.rs"]
 mod bar;
 #[path = "../calendar.rs"]

@@ -1,3 +1,4 @@
+mod background;
 mod bar;
 mod calendar;
 mod clipboard;

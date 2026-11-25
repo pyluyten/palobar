@@ -1,4 +1,5 @@
 use super::{choose_image, label};
+use crate::background::{mode_index, Background, MODES};
 use crate::config::{read_config, update_config};
 use crate::lockscreen;
 use gtk::prelude::*;
@@ -21,10 +22,13 @@ struct Page {
     file: gio::File,
     status: gtk::Label,
     path: gtk::Label,
-    picture: gtk::Picture,
+    preview: gtk::DrawingArea,
+    background: Rc<RefCell<Option<Background>>>,
     preview_css: gtk::CssProvider,
     images: RefCell<Option<(String, String)>>,
     color: gtk::ColorButton,
+    mode: gtk::DropDown,
+    saved_mode: Cell<u32>,
     delay: gtk::DropDown,
     delay_hint: gtk::Label,
     saved_delay: Cell<u32>,
@@ -57,15 +61,15 @@ impl Page {
         let mut images = self.images.borrow_mut();
         if !matches!(images.as_ref(), Some((old, fallback)) if old == image && fallback == wallpaper)
         {
-            let texture = [image, wallpaper]
+            let background = [image, wallpaper]
                 .into_iter()
                 .filter(|path| !path.is_empty())
                 .find_map(|path| {
-                    gdk_pixbuf::Pixbuf::from_file_at_scale(path, 440, 248, true)
-                        .ok()
-                        .map(|image| gdk::Texture::for_pixbuf(&image))
+                    let image =
+                        gdk_pixbuf::Pixbuf::from_file_at_scale(path, 440, 248, true).ok()?;
+                    Background::new(&image)
                 });
-            self.picture.set_paintable(texture.as_ref());
+            self.background.replace(background);
             *images = Some((image.to_owned(), wallpaper.to_owned()));
         }
         let color = lock["color"]
@@ -78,6 +82,10 @@ impl Page {
             ".prefs-wp-preview {{ background-color: {color}; }}"
         ));
         self.color.set_rgba(&color);
+        let mode = mode_index(lock["mode"].as_str());
+        self.saved_mode.set(mode);
+        self.mode.set_selected(mode);
+        self.preview.queue_draw();
         let enabled = config["power"]["screenBlankEnabled"]
             .as_bool()
             .unwrap_or(true);
@@ -165,14 +173,11 @@ pub(super) fn build(window: &gtk::ApplicationWindow) -> gtk::ScrolledWindow {
     let frame = gtk::Overlay::new();
     frame.add_css_class("prefs-wp-preview");
     frame.set_overflow(gtk::Overflow::Hidden);
-    frame.set_child(Some(
-        &gtk::Box::builder()
-            .width_request(220)
-            .height_request(124)
-            .build(),
-    ));
-    let picture = gtk::Picture::new();
-    frame.add_overlay(&picture);
+    let drawing = gtk::DrawingArea::builder()
+        .content_width(220)
+        .content_height(124)
+        .build();
+    frame.set_child(Some(&drawing));
     preview.append(&frame);
     let preview_css = gtk::CssProvider::new();
     frame
@@ -201,6 +206,16 @@ pub(super) fn build(window: &gtk::ApplicationWindow) -> gtk::ScrolledWindow {
     color.update_property(&[gtk::accessible::Property::Label("Fallback Color")]);
     color_row.append(&color);
 
+    let mode_row = row(&group, false);
+    let mode_label = label("_Display Mode", "prefs-row-title");
+    mode_label.set_use_underline(true);
+    mode_label.set_hexpand(true);
+    mode_row.append(&mode_label);
+    let mode = gtk::DropDown::from_strings(&MODES);
+    mode_label.set_mnemonic_widget(Some(&mode));
+    mode.update_property(&[gtk::accessible::Property::Label("Display Mode")]);
+    mode_row.append(&mode);
+
     let auto_lock = row(&group, false);
     let delay_hint = append_info(&auto_lock, "Automatic Lock", "");
     let names = DELAYS.map(|(name, _)| name);
@@ -218,14 +233,31 @@ pub(super) fn build(window: &gtk::ApplicationWindow) -> gtk::ScrolledWindow {
     lock_now.add_css_class("prefs-btn");
     test.append(&lock_now);
 
+    let background = Rc::new(RefCell::new(None::<Background>));
+    drawing.set_draw_func({
+        let mode = mode.downgrade();
+        let background = background.clone();
+        move |_, context, width, height| {
+            if let (Some(mode), Some(background)) = (mode.upgrade(), background.borrow().as_ref()) {
+                let mode = MODES
+                    .get(mode.selected() as usize)
+                    .copied()
+                    .unwrap_or(MODES[0]);
+                background.draw(context, width, height, mode, 0.25);
+            }
+        }
+    });
     let state = Rc::new(Page {
         file: gio::File::for_path(glib::user_config_dir().join("palobar/config.json")),
         status,
         path,
-        picture,
+        preview: drawing,
+        background,
         preview_css,
         images: RefCell::default(),
         color,
+        mode,
+        saved_mode: Cell::default(),
         delay,
         delay_hint,
         saved_delay: Cell::default(),
@@ -263,6 +295,18 @@ pub(super) fn build(window: &gtk::ApplicationWindow) -> gtk::ScrolledWindow {
                 let [red, green, blue] = [color.red(), color.green(), color.blue()]
                     .map(|value| (value * 255.0).round() as u8);
                 state.save("color", json!(format!("#{red:02x}{green:02x}{blue:02x}")));
+            }
+        }
+    });
+    state.mode.connect_selected_notify({
+        let state = Rc::downgrade(&state);
+        move |mode| {
+            if let Some(state) = state.upgrade() {
+                if mode.selected() != state.saved_mode.get() {
+                    if let Some(mode) = MODES.get(mode.selected() as usize) {
+                        state.save("mode", json!(mode));
+                    }
+                }
             }
         }
     });

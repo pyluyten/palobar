@@ -17,6 +17,15 @@
     system = "x86_64-linux";
     pkgs = nixpkgs.legacyPackages.${system};
     agsPackages = ags.packages.${system};
+    pixbufLoaders = pkgs.runCommand "palobar-pixbuf-loaders.cache" {} ''
+      cat ${pkgs.gdk-pixbuf}/${pkgs.gdk-pixbuf.binaryDir}/loaders.cache \
+        ${pkgs.webp-pixbuf-loader}/${pkgs.gdk-pixbuf.binaryDir}/webp-loaders.cache > "$out"
+    '';
+    swaybg = pkgs.swaybg.overrideAttrs (old: {
+      postInstall = (old.postInstall or "") + ''
+        export GDK_PIXBUF_MODULE_FILE="${pixbufLoaders}"
+      '';
+    });
 
     astalDeps = with agsPackages; [
       astal4
@@ -55,7 +64,7 @@
           pkgs.gtk4-layer-shell
           pkgs.gtksourceview5
           pkgs.dart-sass
-          pkgs.swaybg
+          swaybg
           pkgs.swayidle
           pkgs.wl-clipboard
           pkgs.cliphist
@@ -87,9 +96,7 @@
 
         # Keep the standard GTK loaders alongside the WebP loader for previews.
         mkdir -p $out/share/palobar
-        cat "$GDK_PIXBUF_MODULE_FILE" \
-          ${pkgs.webp-pixbuf-loader}/${pkgs.gdk-pixbuf.binaryDir}/webp-loaders.cache \
-          > $out/share/palobar/loaders.cache
+        ln -s "${pixbufLoaders}" $out/share/palobar/loaders.cache
         export GDK_PIXBUF_MODULE_FILE="$out/share/palobar/loaders.cache"
 
         wrapProgram $out/bin/palobar-prefs \
@@ -100,7 +107,7 @@
 
         wrapProgram $out/bin/.palobar-bin \
           --prefix PATH : $out/bin \
-          --prefix PATH : ${pkgs.lib.makeBinPath [pkgs.swaybg pkgs.swayidle pkgs.wl-clipboard pkgs.cliphist pkgs.networkmanager]}
+          --prefix PATH : ${pkgs.lib.makeBinPath [swaybg pkgs.swayidle pkgs.wl-clipboard pkgs.cliphist pkgs.networkmanager]}
 
         cat > $out/bin/palobar-ctl <<EOF
         #!${pkgs.runtimeShell}
@@ -159,6 +166,7 @@
 
       preFixup = ''
         gappsWrapperArgs+=(
+          --set GDK_PIXBUF_MODULE_FILE "${pixbufLoaders}"
           --prefix PATH : "${palobar}/bin"
           --set PALOBAR_GTKSOURCE_LANGUAGE_DIR "${palobar}/share/palobar/language-specs"
           --suffix PATH : "${pkgs.lib.makeBinPath [pkgs.niri pkgs.networkmanager pkgs.wireplumber pkgs.systemd pkgs.coreutils pkgs.wl-clipboard pkgs.cliphist pkgs.cups]}"
@@ -246,6 +254,7 @@
 
     devShells.${system} = {
       rust = pkgs.mkShell {
+        GDK_PIXBUF_MODULE_FILE = "${pixbufLoaders}";
         packages = [
           pkgs.cargo
           pkgs.rustc
@@ -262,6 +271,7 @@
       };
 
       default = pkgs.mkShell {
+        GDK_PIXBUF_MODULE_FILE = "${pixbufLoaders}";
         PALOBAR_GTKSOURCE_LANGUAGE_DIR = "${self}";
         PALOBAR_VERSION_FILE = "${self}/VERSION";
         packages = [
@@ -270,7 +280,7 @@
           pkgs.typescript
           pkgs.gtksourceview5
           pkgs.dart-sass
-          pkgs.swaybg
+          swaybg
           pkgs.swayidle
           pkgs.wl-clipboard
           pkgs.cliphist

@@ -3,10 +3,11 @@ mod native;
 #[path = "lockscreen/pam.rs"]
 mod pam;
 
+use crate::background::{mode_index, Background, MODES};
 use chrono::Local;
 use glib::translate::ToGlibPtr;
 use gtk::prelude::*;
-use gtk::{gdk, gio, glib};
+use gtk::{gdk, gdk_pixbuf, gio, glib};
 use native::NativeLock;
 use std::cell::{Cell, RefCell};
 use std::ffi::{CStr, CString, OsStr};
@@ -46,7 +47,8 @@ struct Session {
     error: Cell<Option<&'static str>>,
     user: CString,
     display_name: String,
-    background: Option<gdk::Texture>,
+    background: Option<Background>,
+    background_mode: &'static str,
     avatar: Option<gdk::Texture>,
 }
 
@@ -58,7 +60,7 @@ fn texture(path: impl AsRef<std::path::Path>) -> Option<gdk::Texture> {
     gdk::Texture::from_file(&gio::File::for_path(path)).ok()
 }
 
-fn load_background() -> (Option<gdk::Texture>, gdk::RGBA) {
+fn load_background() -> (Option<Background>, gdk::RGBA, &'static str) {
     let path = glib::user_config_dir().join("palobar/config.json");
     let config = std::fs::read(path)
         .ok()
@@ -68,13 +70,17 @@ fn load_background() -> (Option<gdk::Texture>, gdk::RGBA) {
         .into_iter()
         .filter_map(|key| config.pointer(key).and_then(serde_json::Value::as_str))
         .filter(|path| !path.is_empty())
-        .find_map(texture);
+        .find_map(|path| {
+            let image = gdk_pixbuf::Pixbuf::from_file(path).ok()?;
+            Background::new(&image)
+        });
     let color = config
         .pointer("/lockscreen/color")
         .and_then(serde_json::Value::as_str)
         .and_then(|color| gdk::RGBA::parse(color).ok())
         .unwrap_or_else(|| gdk::RGBA::parse(FALLBACK_COLOR).expect("valid fallback color"));
-    (background, color)
+    let mode = MODES[mode_index(config["lockscreen"]["mode"].as_str()) as usize];
+    (background, color, mode)
 }
 
 fn styled_label(text: Option<&str>, class: &str) -> gtk::Label {
@@ -128,11 +134,20 @@ impl Session {
         window.connect_close_request(|_| glib::Propagation::Stop);
 
         let overlay = gtk::Overlay::new();
-        let background = self
-            .background
-            .as_ref()
-            .map(|texture| picture(texture).upcast::<gtk::Widget>())
-            .unwrap_or_else(|| gtk::Box::new(gtk::Orientation::Vertical, 0).upcast());
+        let background = gtk::DrawingArea::new();
+        if let Some(image) = self.background.clone() {
+            let mode = self.background_mode;
+            background.set_draw_func(move |area, context, width, height| {
+                image.draw(
+                    context,
+                    width,
+                    height,
+                    mode,
+                    1.0 / f64::from(area.scale_factor()),
+                );
+            });
+        }
+        let background = background.upcast::<gtk::Widget>();
         background.add_css_class("lock-bg");
         overlay.set_child(Some(&background));
 
@@ -400,7 +415,7 @@ pub(crate) fn check_support() -> Result<(), String> {
 fn run_lock() -> Result<(), String> {
     gtk::init().map_err(|error| error.to_string())?;
     let (display, user, native) = prerequisites()?;
-    let (background, color) = load_background();
+    let (background, color, background_mode) = load_background();
     let css = gtk::CssProvider::new();
     css.load_from_data(&format!(
         "{CSS}\nwindow.lock-window {{ background-color: {color}; }}"
@@ -423,6 +438,7 @@ fn run_lock() -> Result<(), String> {
         user,
         display_name,
         background,
+        background_mode,
         avatar: texture(glib::home_dir().join(".face")),
         main_loop: glib::MainLoop::new(None, false),
         outcome: Cell::new(Outcome::Starting),

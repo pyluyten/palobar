@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 const DEFAULT_COLOR: &str = "#131316";
-const MODES: [&str; 5] = ["fill", "fit", "stretch", "center", "tile"];
+use crate::background::MODES;
 const ACCENTS: [(&str, &str, &str); 9] = [
     ("blue", "Blue", "#3584e4"),
     ("teal", "Teal", "#2190a4"),
