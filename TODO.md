@@ -60,7 +60,7 @@ ____
 | system-datetime   | todo                                         |
 | system-users      | todo                                         |
 | system-ssh        | todo                                         |
-| system-about      | Done                                         |
+| system-about      | ☑ Done                                       |
 
 More settings from "tweaks"
 
@@ -74,14 +74,15 @@ More settings from "tweaks"
 
 ## Meta
 
-- [ ] Be easy to install
-  appimage proved feasible to solve the issue when ags/astal are not available.
-  more testing need but "easy to install" may be solved
-
 - [x] Change tech if too heavy or uneasy
   gjs/astal was fine for dev & usage (slighly high ram), but
   dependency is not suitable.
   rewrote to pure rust gtk.
+
+- [ ] Be easy to install
+  appimage proved feasible to solve the issue when ags/astal are not available.
+  more testing need but "easy to install" may be solved
+
 
 - [ ] Plugins
   would be nice to be able to activate or not some applets
