@@ -730,7 +730,7 @@ fn build(app: &gtk::Application) {
         ("mouse", "Mouse", "input-mouse-symbolic"),
         ("keyboard", "Keyboard", "input-keyboard-symbolic"),
         ("printers", "Printers", "printer-symbolic"),
-        ("security", "Security", "security-high-symbolic"),
+        ("security", "Security", "system-lock-screen-symbolic"),
         ("system", "System", "computer-symbolic"),
         ("fallback", "Fallback", "preferences-system-symbolic"),
     ];
