@@ -44,7 +44,7 @@
       cargoLock.lockFile = ./Cargo.lock;
 
       nativeBuildInputs = [pkgs.pkg-config pkgs.wrapGAppsHook4];
-      buildInputs = [pkgs.gtk4 pkgs.gtk4-layer-shell pkgs.gtksourceview5 pkgs.gsettings-desktop-schemas];
+      buildInputs = [pkgs.gtk4 pkgs.gtk4-layer-shell pkgs.gtksourceview5 pkgs.gsettings-desktop-schemas pkgs.libxkbcommon.out];
 
       preFixup = ''
         gappsWrapperArgs+=(
@@ -74,6 +74,7 @@
         pkgs.gtk4
         pkgs.gtk4-layer-shell
         pkgs.gtksourceview5
+        pkgs.libxkbcommon.out
         pkgs.gsettings-desktop-schemas
       ] ++ desktopTools;
       shellHook = ''

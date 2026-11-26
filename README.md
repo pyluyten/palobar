@@ -99,9 +99,9 @@ dependencies for main distrib
 
 | Distribution | Packages |
 | --- | --- |
-| Arch Linux | `base-devel rust pkgconf gtk4 gtk4-layer-shell gtksourceview5` |
-| Ubuntu | `build-essential cargo rustc pkg-config libgtk-4-dev libgtk4-layer-shell-dev libgtksourceview-5-dev` |
-| Fedora | `gcc gcc-c++ make cargo pkgconf-pkg-config gtk4-devel gtk4-layer-shell-devel gtksourceview5-devel` |
+| Arch Linux | `base-devel rust pkgconf gtk4 gtk4-layer-shell gtksourceview5 libxkbcommon` |
+| Ubuntu | `build-essential cargo rustc pkg-config libgtk-4-dev libgtk4-layer-shell-dev libgtksourceview-5-dev libxkbregistry-dev` |
+| Fedora | `gcc gcc-c++ make cargo pkgconf-pkg-config gtk4-devel gtk4-layer-shell-devel gtksourceview5-devel libxkbcommon-devel` |
 
 ## components 
 

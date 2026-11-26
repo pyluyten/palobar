@@ -67,6 +67,120 @@ fn alert(window: &glib::WeakRef<gtk::ApplicationWindow>, title: &str, detail: &s
     dialog.present();
 }
 
+mod registry {
+    use std::ffi::{c_char, c_uint, CStr};
+
+    #[repr(C)]
+    struct Context {
+        _private: [u8; 0],
+    }
+
+    #[repr(C)]
+    struct Layout {
+        _private: [u8; 0],
+    }
+
+    #[link(name = "xkbregistry")]
+    extern "C" {
+        fn rxkb_context_new(flags: c_uint) -> *mut Context;
+        fn rxkb_context_parse_default_ruleset(context: *mut Context) -> bool;
+        fn rxkb_context_unref(context: *mut Context) -> *mut Context;
+        fn rxkb_layout_first(context: *mut Context) -> *mut Layout;
+        fn rxkb_layout_next(layout: *mut Layout) -> *mut Layout;
+        fn rxkb_layout_get_name(layout: *mut Layout) -> *const c_char;
+        fn rxkb_layout_get_variant(layout: *mut Layout) -> *const c_char;
+        fn rxkb_layout_get_description(layout: *mut Layout) -> *const c_char;
+    }
+
+    pub(super) fn layouts() -> Vec<String> {
+        // The registry owns the layouts and their strings until the context is released.
+        unsafe {
+            let context = rxkb_context_new(0);
+            if context.is_null() {
+                return Vec::new();
+            }
+            let mut rows = Vec::new();
+            if rxkb_context_parse_default_ruleset(context) {
+                let read = |text: *const c_char| {
+                    (!text.is_null()).then(|| CStr::from_ptr(text).to_string_lossy().into_owned())
+                };
+                let mut layout = rxkb_layout_first(context);
+                while !layout.is_null() {
+                    if let Some(mut code) = read(rxkb_layout_get_name(layout)) {
+                        if let Some(variant) = read(rxkb_layout_get_variant(layout)) {
+                            code.push_str(" / ");
+                            code.push_str(&variant);
+                        }
+                        if let Some(description) = read(rxkb_layout_get_description(layout)) {
+                            code.push_str(" — ");
+                            code.push_str(&description);
+                        }
+                        rows.push(code);
+                    }
+                    layout = rxkb_layout_next(layout);
+                }
+            }
+            rxkb_context_unref(context);
+            rows.sort_unstable();
+            rows
+        }
+    }
+}
+
+fn show_registry(parent: &gtk::ApplicationWindow, rows: Vec<String>) {
+    let dialog = gtk::Dialog::builder()
+        .title("XKB Keyboard Layouts")
+        .transient_for(parent)
+        .modal(true)
+        .destroy_with_parent(true)
+        .default_width(640)
+        .default_height(480)
+        .build();
+    dialog.add_button("Close", gtk::ResponseType::Close);
+    dialog.connect_response(|dialog, _| dialog.destroy());
+
+    let content = dialog.content_area();
+    content.set_spacing(8);
+    content.add_css_class("prefs-page-body");
+    let search = gtk::SearchEntry::builder()
+        .placeholder_text("Search by code, variant, or name")
+        .build();
+    content.append(&search);
+    content.append(&label(
+        "Layout code / variant code — Description",
+        "prefs-muted",
+    ));
+    let view = gtk::TextView::builder()
+        .editable(false)
+        .cursor_visible(false)
+        .wrap_mode(gtk::WrapMode::WordChar)
+        .build();
+    let buffer = view.buffer();
+    content.append(
+        &gtk::ScrolledWindow::builder()
+            .hscrollbar_policy(gtk::PolicyType::Never)
+            .vexpand(true)
+            .child(&view)
+            .build(),
+    );
+    buffer.set_text(&rows.join("\n"));
+    search.connect_search_changed(move |search| {
+        let query = search.text().trim().to_lowercase();
+        let matches = rows
+            .iter()
+            .filter(|row| row.to_lowercase().contains(&query))
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        if matches.is_empty() {
+            buffer.set_text("No matching layouts.");
+        } else {
+            buffer.set_text(&matches.join("\n"));
+        }
+    });
+    dialog.present();
+    search.grab_focus();
+}
+
 fn group(page: &gtk::Box, title: &str) -> gtk::Box {
     page.append(&label(title, "prefs-group-title"));
     let group = gtk::Box::new(gtk::Orientation::Vertical, 0);
@@ -322,6 +436,34 @@ pub(super) fn build(window: &gtk::ApplicationWindow) -> gtk::ScrolledWindow {
         let window = window.clone();
         move |_| refresh(&layouts, &window, None)
     });
+    let browse = gtk::Button::with_label("Browse XKB Layouts");
+    browse.add_css_class("prefs-btn");
+    browse.set_halign(gtk::Align::Start);
+    browse.connect_clicked({
+        let window = window.clone();
+        move |button| {
+            button.set_sensitive(false);
+            let (button, window) = (button.downgrade(), window.clone());
+            glib::spawn_future_local(async move {
+                let rows = gio::spawn_blocking(registry::layouts)
+                    .await
+                    .unwrap_or_default();
+                if let Some(button) = button.upgrade() {
+                    button.set_sensitive(true);
+                }
+                if rows.is_empty() {
+                    alert(
+                        &window,
+                        "Could not load XKB layouts",
+                        "The XKB registry returned no layouts.",
+                    );
+                } else if let Some(window) = window.upgrade() {
+                    show_registry(&window, rows);
+                }
+            });
+        }
+    });
+    page.append(&browse);
     let shortcuts = gtk::Button::with_mnemonic("Show keyboard _shortcuts");
     shortcuts.add_css_class("prefs-btn");
     shortcuts.set_halign(gtk::Align::Start);
