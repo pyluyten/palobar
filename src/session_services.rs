@@ -144,6 +144,10 @@ fn idle_with_caffeine(power: &Value, lock: &Value, executable: &OsStr, caffeine:
     }
 }
 
+fn caffeine_enabled(config: &Value) -> bool {
+    config["caffeine"]["enabled"].as_bool().unwrap_or(false)
+}
+
 struct Services {
     config: gio::File,
     executable: PathBuf,
@@ -157,6 +161,7 @@ impl Services {
     fn refresh(&self) {
         match read_config(&self.config) {
             Ok((config, _)) => {
+                self.caffeine.set(caffeine_enabled(&config));
                 Child::update(&self.wallpaper, wallpaper(&config["wallpaper"]));
                 Child::update(
                     &self.idle,
@@ -184,12 +189,17 @@ fn start_services(app: &gtk::Application) -> Result<(), Box<dyn std::error::Erro
     std::fs::create_dir_all(&directory)?;
     let monitor = gio::File::for_path(&directory)
         .monitor_directory(gio::FileMonitorFlags::WATCH_MOVES, gio::Cancellable::NONE)?;
+    let config = gio::File::for_path(directory.join("config.json"));
+    let caffeine_enabled = read_config(&config)
+        .ok()
+        .map(|(config, _)| caffeine_enabled(&config))
+        .unwrap_or(false);
     let services = Rc::new(Services {
-        config: gio::File::for_path(directory.join("config.json")),
+        config,
         executable: std::env::current_exe()?,
         wallpaper: Rc::default(),
         idle: Rc::default(),
-        caffeine: Cell::new(false),
+        caffeine: Cell::new(caffeine_enabled),
         pending: RefCell::default(),
     });
     monitor.connect_changed({
@@ -237,15 +247,29 @@ fn start_services(app: &gtk::Application) -> Result<(), Box<dyn std::error::Erro
                     let Some(services) = services.upgrade() else {
                         return;
                     };
-                    let enabled = if method == "ToggleCaffeine" {
+                    if method == "ToggleCaffeine" {
                         let enabled = !services.caffeine.get();
-                        services.caffeine.set(enabled);
-                        services.refresh();
-                        enabled
+                        let result = crate::config::update_config(&services.config, |config| {
+                            if !config["caffeine"].is_object() {
+                                config["caffeine"] = serde_json::json!({});
+                            }
+                            config["caffeine"]["enabled"] = serde_json::json!(enabled);
+                            Ok(true)
+                        });
+                        match result {
+                            Ok(()) => {
+                                services.caffeine.set(enabled);
+                                services.refresh();
+                                call.return_value(Some(&(enabled,).to_variant()));
+                            }
+                            Err(error) => call.return_dbus_error(
+                                "io.Astal.Palobar.Session.ConfigError",
+                                &error.to_string(),
+                            ),
+                        }
                     } else {
-                        services.caffeine.get()
-                    };
-                    call.return_value(Some(&(enabled,).to_variant()));
+                        call.return_value(Some(&(services.caffeine.get(),).to_variant()));
+                    }
                 })
                 .build()
                 .map(|id| (connection, id))
@@ -276,6 +300,17 @@ fn start_services(app: &gtk::Application) -> Result<(), Box<dyn std::error::Erro
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn caffeine_setting_defaults_to_disabled_and_reads_the_json_value() {
+        assert!(!caffeine_enabled(&Value::Null));
+        assert!(!caffeine_enabled(
+            &serde_json::json!({"caffeine": {"enabled": false}})
+        ));
+        assert!(caffeine_enabled(
+            &serde_json::json!({"caffeine": {"enabled": true}})
+        ));
+    }
 
     #[test]
     fn combines_screen_blank_lock_and_suspend() {

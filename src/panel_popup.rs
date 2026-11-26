@@ -17,13 +17,15 @@ pub(crate) fn register_state(
     let result = gio::DBusNodeInfo::for_xml(
         r#"<node><interface name="io.Astal.Palobar.Control">
             <method name="GetState"><arg type="s" direction="out"/><arg type="u" direction="out"/></method>
+            <method name="GetNotificationState"><arg type="b" direction="out"/><arg type="b" direction="out"/></method>
+            <method name="SetNotificationsEnabled"><arg type="b" direction="in"/><arg type="b" direction="out"/></method>
         </interface></node>"#,
     ).and_then(|node| {
         let interface = node.lookup_interface(CONTROL_INTERFACE).expect("control interface");
         let app = app.downgrade();
         let notifications = notifications.map(Rc::downgrade);
         connection.register_object(CONTROL_PATH, &interface)
-            .method_call(move |_, _, _, _, _, _, call| {
+            .method_call(move |_, _, _, _, method, parameters, call| {
                 let active = app.upgrade().and_then(|app| {
                     app.windows().into_iter().filter(|window| window.is_visible()).find_map(|window| {
                         [
@@ -36,7 +38,47 @@ pub(crate) fn register_state(
                 });
                 let unread = notifications.as_ref().and_then(|service| service.upgrade())
                     .map_or(0, |service| service.unread_count());
-                call.return_value(Some(&(active.unwrap_or(""), unread).to_variant()));
+                match method {
+                    "GetState" => {
+                        call.return_value(Some(&(active.unwrap_or(""), unread).to_variant()));
+                    }
+                    "GetNotificationState" => {
+                        let service = notifications
+                            .as_ref()
+                            .and_then(|service| service.upgrade());
+                        let state = service
+                            .as_ref()
+                            .map(|service| (true, service.is_enabled()))
+                            .unwrap_or((false, false));
+                        call.return_value(Some(&state.to_variant()));
+                    }
+                    "SetNotificationsEnabled" => {
+                        let Some(enabled) = parameters.get::<(bool,)>().map(|(enabled,)| enabled)
+                        else {
+                            call.return_dbus_error(
+                                "io.Astal.Palobar.Control.InvalidArguments",
+                                "Expected one boolean argument",
+                            );
+                            return;
+                        };
+                        let result = notifications
+                            .as_ref()
+                            .and_then(|service| service.upgrade())
+                            .ok_or_else(|| "Palobar notification service is unavailable".to_owned())
+                            .and_then(|service| service.set_enabled(enabled));
+                        match result {
+                            Ok(()) => call.return_value(Some(&(enabled,).to_variant())),
+                            Err(error) => call.return_dbus_error(
+                                "io.Astal.Palobar.Control.NotificationError",
+                                &error,
+                            ),
+                        }
+                    }
+                    _ => call.return_dbus_error(
+                        "io.Astal.Palobar.Control.UnknownMethod",
+                        "Unknown control method",
+                    ),
+                }
             }).build()
     });
     match result {

@@ -2,7 +2,7 @@ use gtk::prelude::*;
 use gtk::{gdk, gio, glib};
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -118,6 +118,9 @@ pub struct Service {
     path: PathBuf,
     badges: RefCell<Vec<glib::WeakRef<gtk::Label>>>,
     toasts: RefCell<Option<Toasts>>,
+    registration: RefCell<Option<(gio::RegistrationId, gio::RegistrationId)>>,
+    timer: RefCell<Option<glib::SourceId>>,
+    owns_name: Cell<bool>,
 }
 
 fn now() -> i64 {
@@ -136,6 +139,122 @@ fn limit(mut text: String, len: usize) -> String {
 }
 
 impl Service {
+    pub(crate) fn is_enabled(&self) -> bool {
+        self.owns_name.get()
+    }
+
+    pub(crate) fn set_enabled(self: &Rc<Self>, enabled: bool) -> Result<(), String> {
+        if enabled == self.owns_name.get() {
+            return Ok(());
+        }
+        if enabled {
+            self.enable()
+        } else {
+            self.disable();
+            Ok(())
+        }
+    }
+
+    fn enable(self: &Rc<Self>) -> Result<(), String> {
+        let connection = &self.connection;
+        let node = gio::DBusNodeInfo::for_xml(INTERFACES).map_err(|error| error.to_string())?;
+        let public = node
+            .lookup_interface(BUS_NAME)
+            .ok_or("Missing notification interface")?;
+        let private = node
+            .lookup_interface(PRIVATE)
+            .ok_or("Missing Palobar notification interface")?;
+        let weak = Rc::downgrade(self);
+        let public_id = connection
+            .register_object(PATH, &public)
+            .method_call(move |_, _, _, _, method, parameters, call| {
+                if let Some(service) = weak.upgrade() {
+                    service.public(method, parameters, call);
+                }
+            })
+            .build()
+            .map_err(|error| error.to_string())?;
+        let weak = Rc::downgrade(self);
+        let private_id = match connection
+            .register_object(PRIVATE_PATH, &private)
+            .method_call(move |_, _, _, _, method, parameters, call| {
+                if let Some(service) = weak.upgrade() {
+                    service.private(method, parameters, call);
+                }
+            })
+            .build()
+        {
+            Ok(id) => id,
+            Err(error) => {
+                let _ = connection.unregister_object(public_id);
+                return Err(error.to_string());
+            }
+        };
+        let result = connection.call_sync(
+            Some("org.freedesktop.DBus"),
+            "/org/freedesktop/DBus",
+            "org.freedesktop.DBus",
+            "RequestName",
+            Some(&(BUS_NAME, 4u32).to_variant()),
+            None,
+            gio::DBusCallFlags::NONE,
+            1000,
+            gio::Cancellable::NONE,
+        );
+        if !result
+            .as_ref()
+            .ok()
+            .and_then(glib::Variant::get::<(u32,)>)
+            .is_some_and(|(code,)| matches!(code, 1 | 4))
+        {
+            let _ = connection.unregister_object(public_id);
+            let _ = connection.unregister_object(private_id);
+            return Err(result
+                .err()
+                .map(|error| error.to_string())
+                .unwrap_or_else(|| {
+                    "Another application already owns org.freedesktop.Notifications".into()
+                }));
+        }
+        self.registration.replace(Some((public_id, private_id)));
+        self.owns_name.set(true);
+        let ticking = self.clone();
+        self.timer.replace(Some(glib::timeout_add_local(
+            Duration::from_millis(250),
+            move || {
+                ticking.tick();
+                glib::ControlFlow::Continue
+            },
+        )));
+        Ok(())
+    }
+
+    fn disable(self: &Rc<Self>) {
+        self.persist();
+        if let Some(timer) = self.timer.take() {
+            timer.remove();
+        }
+        if let Some((public, private)) = self.registration.take() {
+            let _ = self.connection.unregister_object(public);
+            let _ = self.connection.unregister_object(private);
+        }
+        if self.owns_name.replace(false) {
+            let _ = self.connection.call_sync(
+                Some("org.freedesktop.DBus"),
+                "/org/freedesktop/DBus",
+                "org.freedesktop.DBus",
+                "ReleaseName",
+                Some(&(BUS_NAME,).to_variant()),
+                None,
+                gio::DBusCallFlags::NONE,
+                1000,
+                gio::Cancellable::NONE,
+            );
+        }
+        self.state.borrow_mut().toasts.clear();
+        self.render_toasts();
+    }
+
     pub(crate) fn unread_count(&self) -> u32 {
         self.state.borrow().unread.len() as u32
     }
@@ -575,7 +694,6 @@ pub fn app_icon(notification: &Notification) -> gtk::Image {
 
 pub fn start(app: &gtk::Application, display: &gdk::Display) -> Result<Rc<Service>, String> {
     let connection = app.dbus_connection().ok_or("No session D-Bus connection")?;
-    let node = gio::DBusNodeInfo::for_xml(INTERFACES).map_err(|error| error.to_string())?;
     let path = std::env::var_os("XDG_STATE_HOME")
         .map(PathBuf::from)
         .filter(|path| path.is_absolute())
@@ -609,66 +727,10 @@ pub fn start(app: &gtk::Application, display: &gdk::Display) -> Result<Rc<Servic
         path,
         badges: RefCell::default(),
         toasts: RefCell::default(),
+        registration: RefCell::default(),
+        timer: RefCell::default(),
+        owns_name: Cell::default(),
     });
-    let public = node
-        .lookup_interface(BUS_NAME)
-        .ok_or("Missing notification interface")?;
-    let private = node
-        .lookup_interface(PRIVATE)
-        .ok_or("Missing Palobar notification interface")?;
-    let weak = Rc::downgrade(&service);
-    let public = connection
-        .register_object(PATH, &public)
-        .method_call(move |_, _, _, _, method, parameters, call| {
-            if let Some(service) = weak.upgrade() {
-                service.public(method, parameters, call);
-            }
-        })
-        .build()
-        .map_err(|error| error.to_string())?;
-    let weak = Rc::downgrade(&service);
-    let private = match connection
-        .register_object(PRIVATE_PATH, &private)
-        .method_call(move |_, _, _, _, method, parameters, call| {
-            if let Some(service) = weak.upgrade() {
-                service.private(method, parameters, call);
-            }
-        })
-        .build()
-    {
-        Ok(id) => id,
-        Err(error) => {
-            let _ = connection.unregister_object(public);
-            return Err(error.to_string());
-        }
-    };
-    let result = connection.call_sync(
-        Some("org.freedesktop.DBus"),
-        "/org/freedesktop/DBus",
-        "org.freedesktop.DBus",
-        "RequestName",
-        Some(&(BUS_NAME, 4u32).to_variant()),
-        None,
-        gio::DBusCallFlags::NONE,
-        1000,
-        gio::Cancellable::NONE,
-    );
-    if !result
-        .as_ref()
-        .ok()
-        .and_then(glib::Variant::get::<(u32,)>)
-        .is_some_and(|(code,)| code == 1)
-    {
-        let _ = connection.unregister_object(public);
-        let _ = connection.unregister_object(private);
-        return Err(result
-            .err()
-            .map(|error| error.to_string())
-            .unwrap_or_else(|| {
-                "Another application already owns org.freedesktop.Notifications".into()
-            }));
-    }
-
     let css = gtk::CssProvider::new();
     css.load_from_data(
         "window.notification-toast-window { background: transparent; }
@@ -689,20 +751,12 @@ pub fn start(app: &gtk::Application, display: &gdk::Display) -> Result<Rc<Servic
         &css,
         gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
-    let ticking = service.clone();
-    let timer = glib::timeout_add_local(Duration::from_millis(250), move || {
-        ticking.tick();
-        glib::ControlFlow::Continue
-    });
-    let resources = RefCell::new(Some((timer, public, private)));
+    if let Err(error) = service.set_enabled(true) {
+        eprintln!("[notifications] {error}");
+    }
     let shutdown = service.clone();
     app.connect_shutdown(move |_| {
-        shutdown.persist();
-        if let Some((timer, public, private)) = resources.take() {
-            timer.remove();
-            let _ = connection.unregister_object(public);
-            let _ = connection.unregister_object(private);
-        }
+        shutdown.disable();
     });
     Ok(service)
 }

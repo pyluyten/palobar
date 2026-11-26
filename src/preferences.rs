@@ -162,8 +162,59 @@ fn label(text: &str, class: &str) -> gtk::Label {
 
 fn fallback_page() -> gtk::Box {
     let page = gtk::Box::new(gtk::Orientation::Vertical, 12);
-    page.set_valign(gtk::Align::Center);
     page.add_css_class("prefs-page-body");
+    page.append(&label("Palobar Configuration", "prefs-group-title"));
+    let path = glib::user_config_dir().join("palobar/config.json");
+    let config_group = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    config_group.add_css_class("prefs-group");
+    let path_row = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+    path_row.add_css_class("prefs-row");
+    let path_label = label(&path.display().to_string(), "prefs-row-title");
+    path_label.set_selectable(true);
+    path_label.set_hexpand(true);
+    path_label.set_ellipsize(gtk::pango::EllipsizeMode::Middle);
+    path_row.append(&path_label);
+    let edit = gtk::Button::with_label("Edit");
+    edit.add_css_class("prefs-btn");
+    path_row.append(&edit);
+    config_group.append(&path_row);
+    page.append(&config_group);
+
+    let status = label("", "error");
+    status.set_visible(false);
+    page.append(&status);
+    edit.connect_clicked({
+        let path = path.clone();
+        let status = status.downgrade();
+        move |_| {
+            let result = (|| -> Result<(), String> {
+                let parent = path
+                    .parent()
+                    .ok_or("Configuration path has no parent directory")?;
+                std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+                if !path.exists() {
+                    std::fs::write(&path, "{}\n").map_err(|error| error.to_string())?;
+                }
+                let file = gio::File::for_path(&path);
+                let editor = gio::AppInfo::default_for_type("text/plain", false)
+                    .ok_or("No default text editor is configured")?;
+                editor
+                    .launch(&[file], None::<&gio::AppLaunchContext>)
+                    .map_err(|error| error.to_string())
+            })();
+            if let Some(status) = status.upgrade() {
+                match result {
+                    Ok(()) => status.set_visible(false),
+                    Err(error) => {
+                        status.set_text(&format!("Could not open the configuration file. {error}"));
+                        status.set_visible(true);
+                    }
+                }
+            }
+        }
+    });
+
+    page.append(&label("Other Settings Applications", "prefs-group-title"));
     let buttons = gtk::Box::new(gtk::Orientation::Vertical, 8);
     buttons.set_halign(gtk::Align::Center);
     page.append(&buttons);
