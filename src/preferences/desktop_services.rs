@@ -81,9 +81,63 @@ pub(super) fn applications() -> gtk::ScrolledWindow {
         if names.is_empty() {
             "No active desktop portals detected.".into()
         } else {
-            names.join("\n")
+            format!(
+                "Running desktop portal services\n\n{}",
+                names
+                    .iter()
+                    .map(|name| format!(
+                        "{}\n{}\n{}",
+                        portal_title(name),
+                        name,
+                        portal_description(name)
+                    ))
+                    .collect::<Vec<_>>()
+                    .join("\n\n")
+            )
         }
     })
+}
+
+fn portal_title(name: &str) -> &'static str {
+    match name {
+        "org.freedesktop.portal.Desktop" => "Desktop Portal",
+        "org.freedesktop.portal.Documents" => "Documents Portal",
+        "org.freedesktop.impl.portal.desktop.gnome" => "GNOME Portal Backend",
+        "org.freedesktop.impl.portal.desktop.gtk" => "GTK Portal Backend",
+        "org.freedesktop.impl.portal.desktop.kwallet" => "KDE Wallet Portal Backend",
+        "org.freedesktop.impl.portal.PermissionStore" => "Portal Permission Store",
+        "org.freedesktop.portal.IBus" => "IBus Portal",
+        "org.freedesktop.portal.Tracker" => "Tracker Portal",
+        _ => "Desktop Portal Service",
+    }
+}
+
+fn portal_description(name: &str) -> &'static str {
+    match name {
+        "org.freedesktop.portal.Desktop" => {
+            "Provides sandboxed applications with desktop integration portals."
+        }
+        "org.freedesktop.portal.Documents" => {
+            "Shares selected files and folders with sandboxed applications."
+        }
+        "org.freedesktop.impl.portal.desktop.gnome" => {
+            "GNOME backend for file chooser, settings, screenshots, and other portals."
+        }
+        "org.freedesktop.impl.portal.desktop.gtk" => {
+            "GTK backend, commonly used for file chooser and application dialogs."
+        }
+        "org.freedesktop.impl.portal.desktop.kwallet" => {
+            "KDE Wallet backend for portal-based secret storage."
+        }
+        "org.freedesktop.impl.portal.PermissionStore" => {
+            "Stores per-application portal permissions."
+        }
+        "org.freedesktop.portal.IBus" => "Provides input method integration through IBus.",
+        "org.freedesktop.portal.Tracker" => {
+            "Provides Tracker search integration to sandboxed applications."
+        }
+        _ => "A desktop portal service currently owns this session bus name.",
+    }
 }
 
 pub(super) fn notifications() -> gtk::ScrolledWindow {
