@@ -2,7 +2,7 @@ use crate::config::read_config;
 use gtk::prelude::*;
 use gtk::{gio, glib};
 use serde_json::Value;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -136,11 +136,20 @@ fn idle(power: &Value, lock: &Value, executable: &OsStr) -> Command {
     }
 }
 
+fn idle_with_caffeine(power: &Value, lock: &Value, executable: &OsStr, caffeine: bool) -> Command {
+    if caffeine {
+        Vec::new()
+    } else {
+        idle(power, lock, executable)
+    }
+}
+
 struct Services {
     config: gio::File,
     executable: PathBuf,
     wallpaper: Rc<RefCell<Child>>,
     idle: Rc<RefCell<Child>>,
+    caffeine: Cell<bool>,
     pending: RefCell<Option<glib::SourceId>>,
 }
 
@@ -151,10 +160,11 @@ impl Services {
                 Child::update(&self.wallpaper, wallpaper(&config["wallpaper"]));
                 Child::update(
                     &self.idle,
-                    idle(
+                    idle_with_caffeine(
                         &config["power"],
                         &config["lockscreen"],
                         self.executable.as_os_str(),
+                        self.caffeine.get(),
                     ),
                 );
             }
@@ -179,6 +189,7 @@ fn start_services(app: &gtk::Application) -> Result<(), Box<dyn std::error::Erro
         executable: std::env::current_exe()?,
         wallpaper: Rc::default(),
         idle: Rc::default(),
+        caffeine: Cell::new(false),
         pending: RefCell::default(),
     });
     monitor.connect_changed({
@@ -208,6 +219,46 @@ fn start_services(app: &gtk::Application) -> Result<(), Box<dyn std::error::Erro
         }
     });
     services.refresh();
+    let registration = app.dbus_connection().and_then(|connection| {
+        let result = gio::DBusNodeInfo::for_xml(
+            r#"<node><interface name="io.Astal.Palobar.Session">
+                <method name="GetCaffeine"><arg type="b" direction="out"/></method>
+                <method name="ToggleCaffeine"><arg type="b" direction="out"/></method>
+            </interface></node>"#,
+        )
+        .and_then(|node| {
+            let interface = node
+                .lookup_interface("io.Astal.Palobar.Session")
+                .expect("session interface");
+            let services = Rc::downgrade(&services);
+            connection
+                .register_object("/io/Astal/Palobar/Session", &interface)
+                .method_call(move |_, _, _, _, method, _, call| {
+                    let Some(services) = services.upgrade() else {
+                        return;
+                    };
+                    let enabled = if method == "ToggleCaffeine" {
+                        let enabled = !services.caffeine.get();
+                        services.caffeine.set(enabled);
+                        services.refresh();
+                        enabled
+                    } else {
+                        services.caffeine.get()
+                    };
+                    call.return_value(Some(&(enabled,).to_variant()));
+                })
+                .build()
+                .map(|id| (connection, id))
+        });
+        match result {
+            Ok(registration) => Some(registration),
+            Err(error) => {
+                eprintln!("[palobar session] Could not register the Caffeine control: {error}");
+                None
+            }
+        }
+    });
+    let registration = RefCell::new(registration);
     app.connect_shutdown(move |_| {
         monitor.cancel();
         if let Some(source) = services.pending.take() {
@@ -215,6 +266,9 @@ fn start_services(app: &gtk::Application) -> Result<(), Box<dyn std::error::Erro
         }
         services.idle.borrow_mut().stop();
         services.wallpaper.borrow_mut().stop();
+        if let Some((connection, id)) = registration.take() {
+            let _ = connection.unregister_object(id);
+        }
     });
     Ok(())
 }
@@ -253,5 +307,14 @@ mod tests {
         );
         let disabled = serde_json::json!({"screenBlankEnabled": false});
         assert!(idle(&disabled, &Value::Null, OsStr::new("palobar")).is_empty());
+    }
+
+    #[test]
+    fn caffeine_disables_the_session_idle_service_until_toggled_off() {
+        let power = serde_json::json!({"screenBlankMinutes": 1, "autoSuspendEnabled": true, "autoSuspendMinutes": 15});
+        let lock = serde_json::json!({"autoLockDelaySeconds": 30});
+        let executable = OsStr::new("palobar");
+        assert!(!idle_with_caffeine(&power, &lock, executable, false).is_empty());
+        assert!(idle_with_caffeine(&power, &lock, executable, true).is_empty());
     }
 }

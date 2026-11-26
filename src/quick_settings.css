@@ -24,6 +24,8 @@ window.quick-settings-window { background: transparent; color: #f6f5f4; font: 13
 .qs-toggle-pill { border-radius: 14px; }
 .qs-mini-pill, .qs-toggle-title { font-weight: 700; }
 .qs-toggle-subtitle, .qs-ap-strength { font-size: 12px; color: #ccc; }
+.qs-battery { padding: 8px 12px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); }
+.qs-brightness-icon { min-width: 18px; }
 .qs-submenu { padding: 8px; border-radius: 12px; background: rgba(0, 0, 0, 0.22); }
 .qs-ap-item, .qs-power-item { border-radius: 10px; padding: 8px 10px; }
 .qs-ap-item.connected { background: rgba(53, 132, 228, 0.28); }

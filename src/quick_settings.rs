@@ -109,8 +109,9 @@ fn session_button(
     });
 }
 
-fn header(card: &gtk::Box, window: &gtk::ApplicationWindow) {
+fn header(card: &gtk::Box, window: &gtk::ApplicationWindow, battery: &Battery) {
     let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    row.append(&battery.row);
     let screenshot = icon_button(
         "applets-screenshooter-symbolic",
         "Screenshot",
@@ -386,6 +387,240 @@ impl Audio {
         self.scale.set_sensitive(volume.is_some());
         if let Some(volume) = volume {
             self.render(volume);
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct BatteryStatus {
+    percent: u8,
+    charging: bool,
+}
+
+fn battery_status() -> Option<BatteryStatus> {
+    let supplies = std::fs::read_dir("/sys/class/power_supply").ok()?;
+    let mut capacities = Vec::new();
+    let mut energy_now = 0_u64;
+    let mut energy_full = 0_u64;
+    let mut charging = false;
+    for supply in supplies.flatten() {
+        let path = supply.path();
+        if std::fs::read_to_string(path.join("type")).ok()?.trim() != "Battery" {
+            continue;
+        }
+        if let Ok(value) = std::fs::read_to_string(path.join("capacity")) {
+            if let Ok(value) = value.trim().parse::<u8>() {
+                capacities.push(value);
+            }
+        }
+        let now = std::fs::read_to_string(path.join("energy_now"))
+            .or_else(|_| std::fs::read_to_string(path.join("charge_now")))
+            .ok()
+            .and_then(|value| value.trim().parse::<u64>().ok());
+        let full = std::fs::read_to_string(path.join("energy_full"))
+            .or_else(|_| std::fs::read_to_string(path.join("charge_full")))
+            .ok()
+            .and_then(|value| value.trim().parse::<u64>().ok());
+        if let (Some(now), Some(full)) = (now, full) {
+            energy_now = energy_now.saturating_add(now);
+            energy_full = energy_full.saturating_add(full);
+        }
+        charging |= std::fs::read_to_string(path.join("status"))
+            .is_ok_and(|status| status.trim() == "Charging");
+    }
+    let percent = if energy_full > 0 {
+        ((energy_now.saturating_mul(100) / energy_full).min(100)) as u8
+    } else if !capacities.is_empty() {
+        (capacities
+            .iter()
+            .map(|value| u16::from(*value))
+            .sum::<u16>()
+            / capacities.len() as u16) as u8
+    } else {
+        return None;
+    };
+    Some(BatteryStatus { percent, charging })
+}
+
+fn battery_icon(status: BatteryStatus) -> &'static str {
+    match (status.charging, status.percent) {
+        (true, 90..=100) => "battery-level-100-plugged-in-symbolic",
+        (true, 70..=89) => "battery-level-80-charging-symbolic",
+        (true, 50..=69) => "battery-level-60-charging-symbolic",
+        (true, 30..=49) => "battery-level-40-charging-symbolic",
+        (true, 10..=29) => "battery-level-20-charging-symbolic",
+        (true, _) => "battery-level-0-charging-symbolic",
+        (false, 90..=100) => "battery-level-100-symbolic",
+        (false, 70..=89) => "battery-level-80-symbolic",
+        (false, 50..=69) => "battery-level-60-symbolic",
+        (false, 30..=49) => "battery-level-40-symbolic",
+        (false, 10..=29) => "battery-level-20-symbolic",
+        (false, _) => "battery-level-0-symbolic",
+    }
+}
+
+struct Battery {
+    row: gtk::Box,
+    icon: gtk::Image,
+    label: gtk::Label,
+}
+
+impl Battery {
+    fn new() -> Self {
+        let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        row.add_css_class("qs-battery");
+        row.set_halign(gtk::Align::Start);
+        row.set_visible(false);
+        let icon = gtk::Image::from_icon_name("battery-level-100-symbolic");
+        let label = gtk::Label::new(None);
+        row.append(&icon);
+        row.append(&label);
+        Self { row, icon, label }
+    }
+
+    fn refresh(&self) {
+        if let Some(status) = battery_status() {
+            self.icon.set_icon_name(Some(battery_icon(status)));
+            self.label.set_text(&format!("{}%", status.percent));
+            self.row.set_tooltip_text(Some(if status.charging {
+                "Battery charging"
+            } else {
+                "Battery"
+            }));
+            self.row.set_visible(true);
+        } else {
+            self.row.set_visible(false);
+        }
+    }
+}
+
+fn parse_brightness(output: &str) -> Option<f64> {
+    output.lines().find_map(|line| {
+        let fields: Vec<_> = line.split(',').collect();
+        if fields.get(1)? != &"backlight" {
+            return None;
+        }
+        if let Some(percent) = fields
+            .get(3)
+            .filter(|value| value.ends_with('%'))
+            .and_then(|value| value.trim_end_matches('%').parse::<f64>().ok())
+        {
+            return percent
+                .is_finite()
+                .then_some((percent / 100.0).clamp(0.0, 1.0));
+        }
+        let current = fields.get(2)?.parse::<f64>().ok()?;
+        let maximum = fields.get(3)?.parse::<f64>().ok()?;
+        (maximum > 0.0 && current.is_finite()).then_some((current / maximum).clamp(0.0, 1.0))
+    })
+}
+
+fn airplane_status(wifi: &str, wwan: Option<&str>) -> Option<bool> {
+    match wifi {
+        "enabled" => Some(false),
+        "disabled" => Some(wwan != Some("enabled")),
+        _ => None,
+    }
+}
+
+#[derive(Default)]
+struct BrightnessQueue {
+    level: Cell<Option<u8>>,
+    running: Cell<bool>,
+    revision: Cell<u64>,
+}
+
+struct Brightness {
+    row: gtk::Box,
+    scale: gtk::Scale,
+    syncing: Cell<bool>,
+    queue: Rc<BrightnessQueue>,
+    app: glib::WeakRef<gtk::Application>,
+}
+
+impl Brightness {
+    fn new(card: &gtk::Box, app: &gtk::Application) -> Rc<Self> {
+        let row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+        row.add_css_class("qs-volume");
+        row.set_visible(false);
+        let icon = gtk::Image::from_icon_name("display-brightness-symbolic");
+        icon.add_css_class("qs-brightness-icon");
+        let scale = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.0, 1.0, 0.01);
+        scale.set_hexpand(true);
+        scale.set_draw_value(false);
+        scale.add_css_class("qs-slider");
+        scale.set_sensitive(false);
+        row.append(&icon);
+        row.append(&scale);
+        card.append(&row);
+        let brightness = Rc::new(Self {
+            row,
+            scale,
+            syncing: Cell::new(false),
+            queue: Rc::default(),
+            app: app.downgrade(),
+        });
+        let weak = Rc::downgrade(&brightness);
+        brightness.scale.connect_value_changed(move |scale| {
+            let Some(brightness) = weak.upgrade() else {
+                return;
+            };
+            if brightness.syncing.get() {
+                return;
+            }
+            brightness
+                .queue
+                .level
+                .set(Some((scale.value() * 100.0).round() as u8));
+            brightness.flush();
+        });
+        brightness
+    }
+
+    fn render(&self, level: f64) {
+        self.syncing.set(true);
+        self.scale.set_value(level);
+        self.syncing.set(false);
+        self.scale
+            .set_tooltip_text(Some(&format!("{:.0}%", level * 100.0)));
+    }
+
+    fn flush(&self) {
+        self.queue
+            .revision
+            .set(self.queue.revision.get().wrapping_add(1));
+        if self.queue.running.replace(true) {
+            return;
+        }
+        let queue = self.queue.clone();
+        let hold = self.app.upgrade().map(|app| app.hold());
+        glib::spawn_future_local(async move {
+            while let Some(level) = queue.level.take() {
+                if let Err(error) = command(&["brightnessctl", "set", &format!("{level}%")]).await {
+                    report(&error);
+                }
+            }
+            queue.running.set(false);
+            drop(hold);
+        });
+    }
+
+    async fn refresh(&self) {
+        if self.queue.running.get() {
+            return;
+        }
+        let revision = self.queue.revision.get();
+        let level = command(&["brightnessctl", "-m"])
+            .await
+            .ok()
+            .and_then(|output| parse_brightness(&output));
+        if revision != self.queue.revision.get() {
+            return;
+        }
+        self.row.set_visible(level.is_some());
+        self.scale.set_sensitive(level.is_some());
+        if let Some(level) = level {
+            self.render(level);
         }
     }
 }
@@ -676,6 +911,154 @@ impl Wifi {
     }
 }
 
+struct Airplane {
+    button: gtk::Button,
+    enabled: Cell<bool>,
+    busy: Cell<bool>,
+    revision: Cell<u64>,
+    app: glib::WeakRef<gtk::Application>,
+}
+
+impl Airplane {
+    fn new(row: &gtk::Box, app: &gtk::Application) -> Rc<Self> {
+        let (button, _) = labeled_button("airplane-mode-symbolic", "Airplane Mode", "qs-mini-pill");
+        button.set_sensitive(false);
+        row.append(&button);
+        let airplane = Rc::new(Self {
+            button,
+            enabled: Cell::new(false),
+            busy: Cell::new(false),
+            revision: Cell::new(0),
+            app: app.downgrade(),
+        });
+        let weak = Rc::downgrade(&airplane);
+        airplane.button.connect_clicked(move |_| {
+            let Some(airplane) = weak.upgrade() else {
+                return;
+            };
+            airplane.set_enabled(!airplane.enabled.get());
+        });
+        airplane
+    }
+
+    fn set_enabled(self: &Rc<Self>, airplane_on: bool) {
+        if self.busy.replace(true) {
+            return;
+        }
+        self.revision.set(self.revision.get().wrapping_add(1));
+        self.button.set_sensitive(false);
+        let weak = Rc::downgrade(self);
+        let hold = self.app.upgrade().map(|app| app.hold());
+        glib::spawn_future_local(async move {
+            let mode = if airplane_on { "off" } else { "on" };
+            if let Err(error) = command(&["nmcli", "radio", "all", mode]).await {
+                report(&error);
+            }
+            if let Some(airplane) = weak.upgrade() {
+                airplane.busy.set(false);
+                airplane.refresh().await;
+            }
+            drop(hold);
+        });
+    }
+
+    async fn refresh(&self) {
+        if self.busy.get() {
+            return;
+        }
+        let revision = self.revision.get();
+        let wifi = command(&["nmcli", "radio", "wifi"]).await.ok();
+        let wwan = command(&["nmcli", "radio", "wwan"]).await.ok();
+        if revision != self.revision.get() {
+            return;
+        }
+        let airplane_on = wifi
+            .as_deref()
+            .and_then(|wifi| airplane_status(wifi, wwan.as_deref()));
+        self.enabled.set(airplane_on.unwrap_or(false));
+        self.button.set_sensitive(airplane_on.is_some());
+        active(&self.button, airplane_on == Some(true));
+    }
+}
+
+struct Caffeine {
+    button: gtk::Button,
+    enabled: Cell<bool>,
+    busy: Cell<bool>,
+}
+
+impl Caffeine {
+    fn new(row: &gtk::Box) -> Rc<Self> {
+        let (button, _) =
+            labeled_button("media-playback-pause-symbolic", "Caffeine", "qs-mini-pill");
+        button.set_sensitive(false);
+        row.append(&button);
+        let caffeine = Rc::new(Self {
+            button,
+            enabled: Cell::new(false),
+            busy: Cell::new(false),
+        });
+        let weak = Rc::downgrade(&caffeine);
+        caffeine.button.connect_clicked(move |_| {
+            if let Some(caffeine) = weak.upgrade() {
+                caffeine.toggle();
+            }
+        });
+        caffeine
+    }
+
+    fn toggle(self: &Rc<Self>) {
+        if self.busy.replace(true) {
+            return;
+        }
+        self.button.set_sensitive(false);
+        let weak = Rc::downgrade(self);
+        glib::spawn_future_local(async move {
+            let result = session_caffeine(true).await;
+            if let Some(caffeine) = weak.upgrade() {
+                caffeine.busy.set(false);
+                caffeine.update(result);
+            }
+        });
+    }
+
+    fn update(&self, enabled: Option<bool>) {
+        self.button.set_sensitive(enabled.is_some());
+        if let Some(enabled) = enabled {
+            self.enabled.set(enabled);
+            active(&self.button, enabled);
+        }
+    }
+
+    async fn refresh(&self) {
+        if !self.busy.get() {
+            self.update(session_caffeine(false).await);
+        }
+    }
+}
+
+async fn session_caffeine(toggle: bool) -> Option<bool> {
+    let bus = gio::bus_get_future(gio::BusType::Session).await.ok()?;
+    let reply = bus
+        .call_future(
+            Some(crate::bar::APP_ID),
+            "/io/Astal/Palobar/Session",
+            "io.Astal.Palobar.Session",
+            if toggle {
+                "ToggleCaffeine"
+            } else {
+                "GetCaffeine"
+            },
+            None,
+            None,
+            gio::DBusCallFlags::NO_AUTO_START,
+            1000,
+        )
+        .await
+        .ok()?;
+    reply.get::<(bool,)>().map(|(enabled,)| enabled)
+}
+
 pub(crate) fn appearance() -> Option<gio::Settings> {
     let schema =
         gio::SettingsSchemaSource::default()?.lookup("org.gnome.desktop.interface", true)?;
@@ -716,7 +1099,7 @@ impl Dnd {
     }
 }
 
-fn quick_toggles(card: &gtk::Box, app: &gtk::Application) -> Rc<Dnd> {
+fn quick_toggles(card: &gtk::Box, app: &gtk::Application) -> (Rc<Dnd>, Rc<Airplane>, Rc<Caffeine>) {
     let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     row.set_homogeneous(true);
     let (dark, _) = labeled_button("weather-clear-night-symbolic", "Dark Style", "qs-mini-pill");
@@ -768,6 +1151,11 @@ fn quick_toggles(card: &gtk::Box, app: &gtk::Application) -> Rc<Dnd> {
         busy: Cell::new(false),
         revision: Cell::new(0),
     });
+    let extra_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    extra_row.set_homogeneous(true);
+    let airplane = Airplane::new(&extra_row, app);
+    let caffeine = Caffeine::new(&extra_row);
+    card.append(&extra_row);
     let weak = Rc::downgrade(&dnd);
     let app = app.downgrade();
     dnd.button.connect_clicked(move |button| {
@@ -785,7 +1173,7 @@ fn quick_toggles(card: &gtk::Box, app: &gtk::Application) -> Rc<Dnd> {
             drop(hold);
         });
     });
-    dnd
+    (dnd, airplane, caffeine)
 }
 
 pub fn install_style(display: &gdk::Display) {
@@ -834,10 +1222,19 @@ pub fn toggle(app: &gtk::Application, monitor: &gdk::Monitor, indicator: Option<
         &card,
         indicator,
     );
-    header(&card, &window);
+    let battery = Battery::new();
+    header(&card, &window, &battery);
+    battery.refresh();
     let audio = Audio::new(&card, app);
+    let brightness = Brightness::new(&card, app);
     let wifi = Wifi::new(&card, app);
-    let dnd = quick_toggles(&card, app);
+    let (dnd, airplane, caffeine) = quick_toggles(&card, app);
+    let battery_refresh = glib::spawn_future_local(async move {
+        loop {
+            battery.refresh();
+            glib::timeout_future(Duration::from_secs(30)).await;
+        }
+    });
     let audio_refresh = glib::spawn_future_local(async move {
         loop {
             audio.refresh().await;
@@ -850,16 +1247,38 @@ pub fn toggle(app: &gtk::Application, monitor: &gdk::Monitor, indicator: Option<
             glib::timeout_future(Duration::from_secs(2)).await;
         }
     });
+    let brightness_refresh = glib::spawn_future_local(async move {
+        loop {
+            brightness.refresh().await;
+            glib::timeout_future(Duration::from_secs(3)).await;
+        }
+    });
+    let airplane_refresh = glib::spawn_future_local(async move {
+        loop {
+            airplane.refresh().await;
+            glib::timeout_future(Duration::from_secs(5)).await;
+        }
+    });
     let dnd_refresh = glib::spawn_future_local(async move {
         loop {
             dnd.refresh().await;
             glib::timeout_future(Duration::from_secs(2)).await;
         }
     });
+    let caffeine_refresh = glib::spawn_future_local(async move {
+        loop {
+            caffeine.refresh().await;
+            glib::timeout_future(Duration::from_secs(2)).await;
+        }
+    });
     window.connect_unrealize(move |_| {
+        battery_refresh.abort();
         audio_refresh.abort();
+        brightness_refresh.abort();
         wifi_refresh.abort();
+        airplane_refresh.abort();
         dnd_refresh.abort();
+        caffeine_refresh.abort();
     });
     window.present();
 }
@@ -886,7 +1305,7 @@ pub fn toggle_first_monitor(app: &gtk::Application) {
 
 #[cfg(test)]
 mod tests {
-    use super::{access_points, volume_icon};
+    use super::{access_points, airplane_status, parse_brightness, volume_icon};
 
     #[test]
     fn parses_escaped_wifi_names_and_keeps_the_strongest_access_point() {
@@ -910,5 +1329,28 @@ mod tests {
             "audio-volume-muted-symbolic"
         );
         assert_eq!(volume_icon("Volume: 0.75"), "audio-volume-high-symbolic");
+    }
+
+    #[test]
+    fn parses_backlight_brightness_and_ignores_other_devices() {
+        assert_eq!(
+            parse_brightness("amdgpu_bl1,backlight,153,255,60%"),
+            Some(0.6)
+        );
+        assert_eq!(
+            parse_brightness("amdgpu_bl1,backlight,65535,100%,65535"),
+            Some(1.0)
+        );
+        assert_eq!(parse_brightness("input3,leds,1,1,100%"), None);
+        assert_eq!(parse_brightness("amdgpu_bl1,backlight,0,0,0%"), None);
+    }
+
+    #[test]
+    fn airplane_mode_requires_all_available_radios_to_be_off() {
+        assert_eq!(airplane_status("disabled", Some("disabled")), Some(true));
+        assert_eq!(airplane_status("disabled", None), Some(true));
+        assert_eq!(airplane_status("disabled", Some("enabled")), Some(false));
+        assert_eq!(airplane_status("enabled", None), Some(false));
+        assert_eq!(airplane_status("unavailable", None), None);
     }
 }

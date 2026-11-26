@@ -54,13 +54,14 @@ The code is now rust and mainly depends on gtk & gtk-layer-shell.
 
 Runtime integrations are optional. Report it as a bug if some missing command makes palobar fail or if palobar fails to report a missing component.
 
-- `niri`
-- `swaybg`
+- `niri` is atm the only supported compositor
+- `swaybg` to set wallpaper
 - `swayidle` and system PAM library is required for lock screen
 - `wl-clipboard`, `cliphist`
 - `NetworkManager` (`nmcli`)
+- `brightnessctl` for display brightness, when supported by the device
 - PipeWire/WirePlumber (`wpctl`)
-- `systemctl`
+- `systemctl` for power actions
 - CUPS (`lpstat`)
 
 
@@ -85,10 +86,13 @@ make build
 make install PREFIX="$HOME/.local"
 ```
 
-and eventually install-pam ie creates creates `/etc/pam.d/astal-auth` and refuses to overwrite an existing file.
+and eventually install-pam
+
 ```sh
 make install-pam
 ```
+
+*ie tries to create creates `/etc/pam.d/astal-auth` if it does not exist*
 
 dependencies for main distrib
 
