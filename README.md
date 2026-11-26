@@ -76,13 +76,18 @@ If you click on the workspaces button in the top bar, niri might move the cursor
 
 under nixos (or just using nix), simply use `nix build`, `nix install` to make all components available.
 
-## on FHS Linux
+## on other linux (fhs)
 
-eventually provide a prefix to make install
+(PREFIX is optional)
 
 ```sh
 make build
 make install PREFIX="$HOME/.local"
+```
+
+and eventually install-pam ie creates creates `/etc/pam.d/astal-auth` and refuses to overwrite an existing file.
+```sh
+make install-pam
 ```
 
 dependencies for main distrib
