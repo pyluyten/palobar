@@ -95,6 +95,10 @@ pub(crate) fn register_state(
 }
 
 pub(crate) fn control_action(action: &str) -> glib::ExitCode {
+    try_control_action(action).map_or_else(report_control_failure, |_| glib::ExitCode::SUCCESS)
+}
+
+pub(crate) fn try_control_action(action: &str) -> Result<glib::Variant, glib::Error> {
     let parameters = (
         action,
         Vec::<glib::Variant>::new(),
@@ -107,7 +111,6 @@ pub(crate) fn control_action(action: &str) -> glib::ExitCode {
         "Activate",
         Some(&parameters.to_variant()),
     )
-    .map_or_else(report_control_failure, |_| glib::ExitCode::SUCCESS)
 }
 
 pub(crate) fn print_state(command: &str) -> glib::ExitCode {

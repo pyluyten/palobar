@@ -4,7 +4,7 @@ use gtk::{gdk, gio, glib};
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::process::Command;
@@ -579,23 +579,26 @@ fn watch_windows(dock: &DockRef, window: &gtk::ApplicationWindow) -> Result<(), 
     Ok(())
 }
 
-fn build(app: &gtk::Application) {
-    if let Some(window) = app.windows().first() {
-        window.close();
-        return;
-    }
-    let Some(display) = gdk::Display::default() else {
-        return;
-    };
-    let Some(monitor) = display.monitors().item(0).and_downcast::<gdk::Monitor>() else {
-        return;
-    };
+const APP_ID: &str = "io.Astal.Palobar.RustDock";
+const ACTION: &str = "toggle-dock";
+const WINDOW_CLASS: &str = "standalone-dock";
+pub(crate) const ALWAYS_VISIBLE_KEY: &str = "dockAlwaysVisible";
+
+fn standalone(app: &gtk::Application) -> Option<gtk::Window> {
+    app.windows()
+        .into_iter()
+        .find(|window| window.has_css_class(WINDOW_CLASS))
+}
+
+fn build_standalone(app: &gtk::Application) -> Option<gtk::ApplicationWindow> {
+    let display = gdk::Display::default()?;
+    let monitor = display.monitors().item(0).and_downcast::<gdk::Monitor>()?;
 
     let window = gtk::ApplicationWindow::builder()
         .application(app)
         .title("Palobar Dock")
         .build();
-    window.add_css_class("standalone-dock");
+    window.add_css_class(WINDOW_CLASS);
     window.init_layer_shell();
     window.set_namespace(Some("standalone-dock"));
     window.set_monitor(Some(&monitor));
@@ -603,7 +606,7 @@ fn build(app: &gtk::Application) {
     window.set_layer(Layer::Overlay);
     window.set_keyboard_mode(KeyboardMode::OnDemand);
     window.set_margin(Edge::Bottom, 24);
-    let container = widget(&window, ApplicationsButton::Show);
+    let container = dock_contents(&window, ApplicationsButton::Show);
     window.set_child(Some(&container));
 
     let keys = gtk::EventControllerKey::new();
@@ -618,10 +621,216 @@ fn build(app: &gtk::Application) {
     });
     window.add_controller(keys);
 
-    window.present();
+    Some(window)
+}
+
+struct Controller {
+    app: glib::WeakRef<gtk::Application>,
+    action: glib::WeakRef<gio::SimpleAction>,
+    permanent: Cell<bool>,
+    external: Cell<Option<bool>>,
+}
+
+impl Controller {
+    fn set_standalone_visible(&self, visible: bool) {
+        if let Some(action) = self.action.upgrade() {
+            let visible = visible || self.external.get() == Some(true);
+            action.set_state(&visible.to_variant());
+        }
+    }
+
+    fn show(self: &Rc<Self>) {
+        if self.external.get() != Some(false) {
+            return;
+        }
+        let Some(app) = self.app.upgrade() else {
+            return;
+        };
+        if standalone(&app).is_some() {
+            return;
+        }
+        if let Some(window) = build_standalone(&app) {
+            let controller = Rc::downgrade(self);
+            window.connect_close_request(move |_| {
+                if controller
+                    .upgrade()
+                    .is_some_and(|state| state.permanent.get())
+                {
+                    glib::Propagation::Stop
+                } else {
+                    glib::Propagation::Proceed
+                }
+            });
+            self.set_standalone_visible(true);
+            window.present();
+        }
+    }
+
+    fn reload(self: &Rc<Self>, config: &gio::File) {
+        match read_config(config) {
+            Ok((config, _)) => {
+                let enabled = config[ALWAYS_VISIBLE_KEY].as_bool().unwrap_or(false);
+                let was_enabled = self.permanent.replace(enabled);
+                if enabled {
+                    self.show();
+                } else if was_enabled {
+                    if let Some(window) = self.app.upgrade().and_then(|app| standalone(&app)) {
+                        window.close();
+                    }
+                }
+            }
+            Err(error) => report(error),
+        }
+    }
+}
+
+pub fn register_panel_action(app: &gtk::Application) {
+    let action = gio::SimpleAction::new_stateful(ACTION, None, &false.to_variant());
+    action.connect_change_state(|_, _| {});
+    let controller = Rc::new(Controller {
+        app: app.downgrade(),
+        action: action.downgrade(),
+        permanent: Cell::new(false),
+        external: Cell::new(None),
+    });
+    action.connect_activate({
+        let controller = controller.clone();
+        move |_, _| {
+            let Some(app) = controller.app.upgrade() else {
+                return;
+            };
+            if controller.permanent.get() {
+                controller.show();
+            } else if let Some(window) = standalone(&app) {
+                window.close();
+            } else if controller.external.get() == Some(true) {
+                if let Some(bus) = app.dbus_connection() {
+                    bus.call(
+                        Some(APP_ID),
+                        "/io/Astal/Palobar/RustDock",
+                        "org.freedesktop.Application",
+                        "Activate",
+                        Some(
+                            &(std::collections::HashMap::<String, glib::Variant>::new(),)
+                                .to_variant(),
+                        ),
+                        None,
+                        gio::DBusCallFlags::NO_AUTO_START,
+                        1000,
+                        gio::Cancellable::NONE,
+                        |_| {},
+                    );
+                }
+            } else {
+                controller.show();
+            }
+        }
+    });
+    app.add_action(&action);
+    app.connect_window_removed({
+        let controller = controller.clone();
+        move |_, window| {
+            if window.has_css_class(WINDOW_CLASS) {
+                controller.set_standalone_visible(false);
+            }
+        }
+    });
+    app.connect_startup(move |app| {
+        let directory = glib::user_config_dir().join("palobar");
+        let config = gio::File::for_path(directory.join("config.json"));
+        let monitor = std::fs::create_dir_all(&directory)
+            .map_err(|error| error.to_string())
+            .and_then(|()| {
+                gio::File::for_path(&directory)
+                    .monitor_directory(gio::FileMonitorFlags::WATCH_MOVES, gio::Cancellable::NONE)
+                    .map_err(|error| error.to_string())
+            });
+        match monitor {
+            Ok(monitor) => {
+                monitor.connect_changed({
+                    let controller = controller.clone();
+                    let config = config.clone();
+                    move |_, file, other, _| {
+                        if file.equal(&config) || other.is_some_and(|file| file.equal(&config)) {
+                            controller.reload(&config);
+                        }
+                    }
+                });
+                app.connect_shutdown(move |_| {
+                    monitor.cancel();
+                });
+            }
+            Err(error) => report(error),
+        }
+        if let Some(bus) = app.dbus_connection() {
+            let watcher = gio::bus_watch_name_on_connection(
+                &bus,
+                APP_ID,
+                gio::BusNameWatcherFlags::NONE,
+                {
+                    let controller = controller.clone();
+                    move |_, _, _| {
+                        controller.external.set(Some(true));
+                        controller.set_standalone_visible(false);
+                        if let Some(window) =
+                            controller.app.upgrade().and_then(|app| standalone(&app))
+                        {
+                            window.destroy();
+                        }
+                    }
+                },
+                {
+                    let controller = controller.clone();
+                    move |_, _| {
+                        let was_external = controller.external.replace(Some(false));
+                        if was_external == Some(true) {
+                            controller.set_standalone_visible(false);
+                        }
+                        if controller.permanent.get() {
+                            controller.show();
+                        }
+                    }
+                },
+            );
+            let watcher = RefCell::new(Some(watcher));
+            app.connect_shutdown(move |_| {
+                if let Some(watcher) = watcher.take() {
+                    gio::bus_unwatch_name(watcher);
+                }
+            });
+        } else {
+            controller.external.set(Some(false));
+        }
+        controller.reload(&config);
+    });
 }
 
 pub fn widget(window: &gtk::ApplicationWindow, applications: ApplicationsButton) -> gtk::Box {
+    let Some(action) = window
+        .application()
+        .and_then(|app| app.lookup_action(ACTION))
+    else {
+        return dock_contents(window, applications);
+    };
+    let wrapper = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    wrapper.set_visible(false);
+    let window = window.downgrade();
+    wrapper.connect_visible_notify(move |wrapper| {
+        if wrapper.get_visible() && wrapper.first_child().is_none() {
+            if let Some(window) = window.upgrade() {
+                wrapper.append(&dock_contents(&window, applications.clone()));
+            }
+        }
+    });
+    action
+        .bind_property("state", &wrapper, "visible")
+        .sync_create()
+        .transform_to(|_, state: glib::Variant| state.get::<bool>().map(|visible| !visible))
+        .build();
+    wrapper
+}
+
+fn dock_contents(window: &gtk::ApplicationWindow, applications: ApplicationsButton) -> gtk::Box {
     let container = gtk::Box::new(gtk::Orientation::Horizontal, 12);
     container.add_css_class("dock");
 
@@ -689,14 +898,28 @@ pub fn install_style(display: &gdk::Display) {
 }
 
 pub fn run() -> glib::ExitCode {
-    let app = gtk::Application::builder()
-        .application_id("io.Astal.Palobar.RustDock")
-        .build();
+    match crate::panel_popup::try_control_action(ACTION) {
+        Ok(_) => return glib::ExitCode::SUCCESS,
+        Err(error)
+            if error.matches(gio::DBusError::ServiceUnknown)
+                || error.matches(gio::DBusError::NameHasNoOwner) => {}
+        Err(error) => {
+            report(error);
+            return glib::ExitCode::FAILURE;
+        }
+    }
+    let app = gtk::Application::builder().application_id(APP_ID).build();
     app.connect_startup(|_| {
         if let Some(display) = gdk::Display::default() {
             install_style(&display);
         }
     });
-    app.connect_activate(build);
+    app.connect_activate(|app| {
+        if let Some(window) = standalone(app) {
+            window.close();
+        } else if let Some(window) = build_standalone(app) {
+            window.present();
+        }
+    });
     app.run_with_args::<&str>(&[])
 }

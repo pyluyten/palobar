@@ -1,4 +1,6 @@
 use super::label;
+use crate::config::{read_config, update_config};
+use crate::dock::ALWAYS_VISIBLE_KEY;
 use gtk::prelude::*;
 use gtk::{gio, glib};
 use sourceview5::prelude::{BufferExt, ViewExt};
@@ -62,9 +64,79 @@ fn open_editor(window: &gtk::ApplicationWindow, file: &gio::File) {
     }
 }
 
+fn dock_setting(page: &gtk::Box) {
+    const TITLE: &str = "Keep Dock Visible";
+    let row = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+    row.add_css_class("prefs-group");
+    row.add_css_class("prefs-row");
+    row.add_css_class("last");
+    let title = label(TITLE, "prefs-row-title");
+    title.set_hexpand(true);
+    row.append(&title);
+    let toggle = gtk::Switch::builder().valign(gtk::Align::Center).build();
+    toggle.update_property(&[gtk::accessible::Property::Label(TITLE)]);
+    row.append(&toggle);
+    page.append(&row);
+
+    let status = label("", "error");
+    status.set_visible(false);
+    page.append(&status);
+    let directory = glib::user_config_dir().join("palobar");
+    let config = gio::File::for_path(directory.join("config.json"));
+    let saved = Rc::new(Cell::new(false));
+    page.connect_map({
+        let toggle = toggle.clone();
+        let config = config.clone();
+        let saved = saved.clone();
+        let status = status.clone();
+        move |_| match read_config(&config) {
+            Ok((value, _)) => {
+                let enabled = value[ALWAYS_VISIBLE_KEY].as_bool().unwrap_or(false);
+                saved.set(enabled);
+                toggle.set_active(enabled);
+                toggle.set_sensitive(true);
+                status.set_visible(false);
+            }
+            Err(error) => {
+                toggle.set_sensitive(false);
+                status.set_text(&format!("Could not read the dock setting. {error}"));
+                status.set_visible(true);
+            }
+        }
+    });
+    toggle.connect_active_notify(move |toggle| {
+        let enabled = toggle.is_active();
+        if enabled == saved.get() {
+            return;
+        }
+        let result = (|| {
+            std::fs::create_dir_all(&directory)?;
+            update_config(&config, |value| {
+                if value[ALWAYS_VISIBLE_KEY].as_bool() == Some(enabled) {
+                    return Ok(false);
+                }
+                value[ALWAYS_VISIBLE_KEY] = enabled.into();
+                Ok(true)
+            })
+        })();
+        match result {
+            Ok(()) => {
+                saved.set(enabled);
+                status.set_visible(false);
+            }
+            Err(error) => {
+                toggle.set_active(saved.get());
+                status.set_text(&format!("Could not save the dock setting. {error}"));
+                status.set_visible(true);
+            }
+        }
+    });
+}
+
 pub(super) fn build(window: &gtk::ApplicationWindow) -> gtk::Box {
     let page = gtk::Box::new(gtk::Orientation::Vertical, 12);
     page.add_css_class("prefs-page-body");
+    dock_setting(&page);
     let header = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     let title = label("Niri Configuration", "prefs-group-title");
     title.set_hexpand(true);

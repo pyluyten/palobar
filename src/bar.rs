@@ -472,6 +472,7 @@ fn run_panel(session: bool) -> gtk::glib::ExitCode {
     calendar::register_panel_action(&app);
     clipboard::register_panel_action(&app);
     launcher::register_panel_action(&app);
+    crate::dock::register_panel_action(&app);
     workspace_dialog::register_panel_action(&app);
     let close_popups = gtk::gio::SimpleAction::new("close-popups", None);
     let weak_app = app.downgrade();
@@ -504,7 +505,11 @@ fn run_panel(session: bool) -> gtk::glib::ExitCode {
     });
     let state = workspaces.clone();
     app.connect_activate(move |app| {
-        if !app.windows().is_empty() {
+        if app
+            .windows()
+            .iter()
+            .any(|window| window.has_css_class("panel-window"))
+        {
             return;
         }
         let Some(display) = gdk::Display::default() else {
