@@ -112,6 +112,7 @@ fn session_button(
 fn header(card: &gtk::Box, window: &gtk::ApplicationWindow, battery: &Battery) {
     let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     row.append(&battery.row);
+    row.append(&gtk::Box::builder().hexpand(true).build());
     let screenshot = icon_button(
         "applets-screenshooter-symbolic",
         "Screenshot",
@@ -140,7 +141,6 @@ fn header(card: &gtk::Box, window: &gtk::ApplicationWindow, battery: &Battery) {
         Err(error) => report(&error),
     });
     row.append(&prefs);
-    row.append(&gtk::Box::builder().hexpand(true).build());
 
     let lock = icon_button(
         "system-lock-screen-symbolic",
@@ -268,13 +268,18 @@ impl Audio {
         let row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
         row.add_css_class("qs-volume");
         let mute = icon_button("audio-volume-medium-symbolic", "Mute", "qs-icon-btn");
+        let icon_slot = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        icon_slot.set_size_request(28, -1);
+        icon_slot.set_halign(gtk::Align::Center);
+        mute.set_halign(gtk::Align::Center);
         let scale = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.0, 1.0, 0.01);
         scale.set_hexpand(true);
         scale.set_draw_value(false);
         scale.add_css_class("qs-slider");
         mute.set_sensitive(false);
         scale.set_sensitive(false);
-        row.append(&mute);
+        icon_slot.append(&mute);
+        row.append(&icon_slot);
         row.append(&scale);
         card.append(&row);
 
@@ -545,12 +550,17 @@ impl Brightness {
         row.set_visible(false);
         let icon = gtk::Image::from_icon_name("display-brightness-symbolic");
         icon.add_css_class("qs-brightness-icon");
+        let icon_slot = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        icon_slot.set_size_request(28, -1);
+        icon_slot.set_halign(gtk::Align::Center);
+        icon.set_halign(gtk::Align::Center);
         let scale = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.0, 1.0, 0.01);
         scale.set_hexpand(true);
         scale.set_draw_value(false);
         scale.add_css_class("qs-slider");
         scale.set_sensitive(false);
-        row.append(&icon);
+        icon_slot.append(&icon);
+        row.append(&icon_slot);
         row.append(&scale);
         card.append(&row);
         let brightness = Rc::new(Self {
