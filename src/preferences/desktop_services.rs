@@ -51,14 +51,14 @@ where
         .build()
 }
 
-async fn session_bus_names() -> Result<Vec<String>, glib::Error> {
+async fn session_bus_names(method: &str) -> Result<Vec<String>, glib::Error> {
     let bus = gio::bus_get_future(gio::BusType::Session).await?;
     let reply = bus
         .call_future(
             Some("org.freedesktop.DBus"),
             "/org/freedesktop/DBus",
             "org.freedesktop.DBus",
-            "ListNames",
+            method,
             None,
             Some(glib::VariantTy::new("(as)").unwrap()),
             gio::DBusCallFlags::NO_AUTO_START,
@@ -70,32 +70,63 @@ async fn session_bus_names() -> Result<Vec<String>, glib::Error> {
 
 pub(super) fn applications() -> gtk::ScrolledWindow {
     page("Desktop Portals", || async {
-        let Ok(mut names) = session_bus_names().await else {
+        let (Ok(running), Ok(activatable)) = (
+            session_bus_names("ListNames").await,
+            session_bus_names("ListActivatableNames").await,
+        ) else {
             return "Could not check desktop portals on the session bus.".into();
         };
-        names.retain(|name| {
-            name.starts_with("org.freedesktop.portal.")
-                || name.starts_with("org.freedesktop.impl.portal.")
-        });
-        names.sort_unstable();
-        if names.is_empty() {
-            "No active desktop portals detected.".into()
-        } else {
-            format!(
-                "Running desktop portal services\n\n{}",
-                names
-                    .iter()
-                    .map(|name| format!(
-                        "{}\n{}\n{}",
-                        portal_title(name),
-                        name,
-                        portal_description(name)
-                    ))
-                    .collect::<Vec<_>>()
-                    .join("\n\n")
-            )
-        }
+        portal_status(&running, &activatable)
     })
+}
+
+fn is_portal_name(name: &str) -> bool {
+    name.starts_with("org.freedesktop.portal.") || name.starts_with("org.freedesktop.impl.portal.")
+}
+
+fn portal_status(running: &[String], activatable: &[String]) -> String {
+    let mut running: Vec<_> = running.iter().filter(|name| is_portal_name(name)).collect();
+    let mut available: Vec<_> = activatable
+        .iter()
+        .filter(|name| is_portal_name(name))
+        .filter(|name| !running.contains(name))
+        .collect();
+    running.sort_unstable();
+    available.sort_unstable();
+    if running.is_empty() && available.is_empty() {
+        return "No desktop portal services are running or available to activate.".into();
+    }
+    let mut sections = Vec::new();
+    if !running.is_empty() {
+        sections.push(format!(
+            "Running\n{}",
+            running
+                .iter()
+                .map(|name| portal_entry(name, "Running"))
+                .collect::<Vec<_>>()
+                .join("\n\n")
+        ));
+    }
+    if !available.is_empty() {
+        sections.push(format!(
+            "Available to start\nThese services are installed and D-Bus can activate them on demand.\n\n{}",
+            available
+                .iter()
+                .map(|name| portal_entry(name, "Available; not running"))
+                .collect::<Vec<_>>()
+                .join("\n\n")
+        ));
+    }
+    sections.join("\n\n")
+}
+
+fn portal_entry(name: &str, state: &str) -> String {
+    format!(
+        "{} · {state}\n{}\n{}",
+        portal_title(name),
+        name,
+        portal_description(name)
+    )
 }
 
 fn portal_title(name: &str) -> &'static str {
@@ -439,4 +470,38 @@ fn authentication_agents() -> std::io::Result<Vec<String>> {
         agents.insert(agent.to_owned());
     }
     Ok(agents.into_iter().collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::portal_status;
+
+    #[test]
+    fn portal_status_separates_running_and_activatable_backends() {
+        let running = vec![
+            "org.freedesktop.portal.Desktop".to_owned(),
+            "org.freedesktop.impl.portal.desktop.gnome".to_owned(),
+        ];
+        let activatable = vec![
+            "org.freedesktop.portal.Desktop".to_owned(),
+            "org.freedesktop.impl.portal.desktop.gnome".to_owned(),
+            "org.freedesktop.impl.portal.desktop.gtk".to_owned(),
+            "org.example.Unrelated".to_owned(),
+        ];
+        let output = portal_status(&running, &activatable);
+        assert!(output.contains("Running\n"));
+        assert!(output.contains("Available to start"));
+        assert!(output.contains("GTK Portal Backend · Available; not running"));
+        assert!(output.contains("D-Bus can activate them on demand"));
+        assert!(!output.contains("org.example.Unrelated"));
+        assert_eq!(output.matches("org.freedesktop.portal.Desktop").count(), 1);
+    }
+
+    #[test]
+    fn portal_status_explains_when_no_portal_is_active_or_activatable() {
+        assert_eq!(
+            portal_status(&[], &[]),
+            "No desktop portal services are running or available to activate."
+        );
+    }
 }
