@@ -48,9 +48,21 @@ Settings imitate gnome-control-center but do not depend on GNOME tech and let yo
 
 </details>
 
-# Usage
+# Build & Usage
 
 The code is now rust and mainly depends on gtk & gtk-layer-shell.
+
+Runtime integrations are optional. Report it as a bug if some missing command makes palobar fail or if palobar fails to report a missing component.
+
+- `niri`
+- `swaybg`
+- `swayidle` and system PAM library is required for lock screen
+- `wl-clipboard`, `cliphist`
+- `NetworkManager` (`nmcli`)
+- PipeWire/WirePlumber (`wpctl`)
+- `systemctl`
+- CUPS (`lpstat`)
+
 
 ## Niri Notes
 
@@ -59,6 +71,27 @@ If you click on the workspaces button in the top bar, niri might move the cursor
 ```
 // warp-mouse-to-focus
 ```
+
+## on nixos
+
+under nixos (or just using nix), simply use `nix build`, `nix install` to make all components available.
+
+## on FHS Linux
+
+eventually provide a prefix to make install
+
+```sh
+make build
+make install PREFIX="$HOME/.local"
+```
+
+dependencies for main distrib
+
+| Distribution | Packages |
+| --- | --- |
+| Arch Linux | `base-devel rust pkgconf gtk4 gtk4-layer-shell gtksourceview5` |
+| Ubuntu | `build-essential cargo rustc pkg-config libgtk-4-dev libgtk4-layer-shell-dev libgtksourceview-5-dev` |
+| Fedora | `gcc gcc-c++ make cargo pkgconf-pkg-config gtk4-devel gtk4-layer-shell-devel gtksourceview5-devel` |
 
 ## components 
 
@@ -73,10 +106,6 @@ Main commands are :
     This includes running `palobar` since you do not need it to run.
 
 Run `palobar` without arg to view all options. Some are for internal purpose.
-
-### nixos
-
-under nixos (or just using nix), simply use `nix build`, `nix install` to make all components available.
 
 ### Convenience appimage
 

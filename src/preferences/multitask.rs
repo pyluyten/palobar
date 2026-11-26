@@ -80,10 +80,28 @@ pub(super) fn build(window: &gtk::ApplicationWindow) -> gtk::Box {
 
     sourceview5::init();
     let languages = sourceview5::LanguageManager::new();
-    let language_dir = std::env::var("PALOBAR_GTKSOURCE_LANGUAGE_DIR")
-        .unwrap_or_else(|_| env!("CARGO_MANIFEST_DIR").to_owned());
+    let language_dir = std::env::var_os("PALOBAR_GTKSOURCE_LANGUAGE_DIR")
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::current_exe()
+                .ok()
+                .and_then(|executable| executable.parent()?.parent().map(Path::to_path_buf))
+                .map(|prefix| prefix.join("share/palobar/language-specs"))
+                .filter(|directory| directory.join("kdl.lang").is_file())
+        })
+        .or_else(|| {
+            [
+                "/usr/local/share/palobar/language-specs",
+                "/usr/share/palobar/language-specs",
+            ]
+            .into_iter()
+            .map(PathBuf::from)
+            .find(|directory| directory.join("kdl.lang").is_file())
+        })
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+    let language_dir = language_dir.to_string_lossy();
     let defaults = languages.search_path();
-    let search_path: Vec<&str> = std::iter::once(language_dir.as_str())
+    let search_path: Vec<&str> = std::iter::once(language_dir.as_ref())
         .chain(defaults.iter().map(|dir| dir.as_str()))
         .collect();
     languages.set_search_path(&search_path);
