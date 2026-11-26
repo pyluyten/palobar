@@ -3,13 +3,15 @@ PREFIX ?= /usr/local
 DESTDIR ?=
 BINDIR ?= $(PREFIX)/bin
 DATADIR ?= $(PREFIX)/share
+APPLICATIONSDIR ?= $(DATADIR)/applications
 ICONDIR ?= $(DATADIR)/icons/hicolor/128x128/apps
 LANGUAGEDIR ?= $(DATADIR)/palobar/language-specs
 PAMDIR ?= /etc/pam.d
 PAM_FLAVOR ?= auto
 PALOBAR_BIN = target/release/palobar
+PREFS_DESKTOP = io.Astal.Palobar.RustPreferences.desktop
 
-.PHONY: all build install install-pam uninstall clean
+.PHONY: all build install install-desktop install-pam uninstall clean
 
 all: build
 
@@ -21,6 +23,13 @@ install:
 	install -Dm755 "$(PALOBAR_BIN)" "$(DESTDIR)$(BINDIR)/palobar"
 	install -Dm644 kdl.lang "$(DESTDIR)$(LANGUAGEDIR)/kdl.lang"
 	install -Dm644 assets/palobar-prefs.png "$(DESTDIR)$(ICONDIR)/io.Astal.palobar-prefs.png"
+	$(MAKE) install-desktop
+
+install-desktop:
+	install -d "$(DESTDIR)$(APPLICATIONSDIR)"
+	printf '%s\n' '[Desktop Entry]' 'Type=Application' 'Name=Palobar Preferences' \
+		'Exec="$(BINDIR)/palobar" prefs' 'Icon=io.Astal.palobar-prefs' \
+		'Categories=Settings;' > "$(DESTDIR)$(APPLICATIONSDIR)/$(PREFS_DESKTOP)"
 
 install-pam:
 	@set -eu; \
@@ -46,6 +55,7 @@ uninstall:
 	rm -f "$(DESTDIR)$(BINDIR)/palobar"
 	rm -f "$(DESTDIR)$(LANGUAGEDIR)/kdl.lang"
 	rm -f "$(DESTDIR)$(ICONDIR)/io.Astal.palobar-prefs.png"
+	rm -f "$(DESTDIR)$(APPLICATIONSDIR)/$(PREFS_DESKTOP)"
 
 clean:
 	$(CARGO) clean

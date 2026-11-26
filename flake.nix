@@ -38,6 +38,7 @@
           ./assets/palobar-prefs.png
           ./Cargo.toml
           ./Cargo.lock
+          ./Makefile
           ./src
         ];
       };
@@ -57,6 +58,7 @@
       '';
 
       postInstall = ''
+        make -f "$NIX_BUILD_TOP/$sourceRoot/Makefile" install-desktop BINDIR="$out/bin" DATADIR="$out/share"
         install -Dm644 "$NIX_BUILD_TOP/$sourceRoot/kdl.lang" "$out/share/palobar/language-specs/kdl.lang"
         install -Dm644 "$NIX_BUILD_TOP/$sourceRoot/assets/palobar-prefs.png" "$out/share/icons/hicolor/128x128/apps/io.Astal.palobar-prefs.png"
       '';
