@@ -1,5 +1,7 @@
 #[path = "preferences/appearance.rs"]
 mod appearance;
+#[path = "preferences/bluetooth.rs"]
+mod bluetooth;
 #[path = "preferences/desktop_services.rs"]
 mod desktop_services;
 #[path = "preferences/keyboard.rs"]
@@ -710,6 +712,7 @@ fn build(app: &gtk::Application) {
         .vexpand(true)
         .child(&content)
         .build();
+    stack.add_titled(&bluetooth::build(&window), Some("bluetooth"), "Bluetooth");
     stack.add_titled(&scroll, Some("output"), "Output");
     stack.add_titled(&sound::build(app), Some("sound"), "Sound");
     stack.add_titled(&power::build(), Some("power"), "Power");
@@ -736,6 +739,7 @@ fn build(app: &gtk::Application) {
     stack.add_titled(&system::build(&window), Some("system"), "System");
     stack.add_titled(&fallback_page(), Some("fallback"), "Fallback");
     let pages = [
+        ("bluetooth", "Bluetooth", "bluetooth-active-symbolic"),
         ("output", "Output", "video-display-symbolic"),
         ("sound", "Sound", "multimedia-volume-control-symbolic"),
         ("power", "Power", "battery-good-symbolic"),

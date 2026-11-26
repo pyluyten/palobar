@@ -59,6 +59,7 @@ Runtime integrations are optional. Report it as a bug if some missing command ma
 - `swayidle` and system PAM library is required for lock screen
 - `wl-clipboard`, `cliphist`
 - `NetworkManager` (`nmcli`)
+- BlueZ (`bluetoothd`) for Bluetooth settings and device management
 - `brightnessctl` for display brightness, when supported by the device
 - PipeWire/WirePlumber (`wpctl`)
 - `systemctl` for power actions
