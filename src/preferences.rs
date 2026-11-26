@@ -160,6 +160,67 @@ fn label(text: &str, class: &str) -> gtk::Label {
     label
 }
 
+fn launch_text_editor(
+    file: &gio::File,
+    context: Option<&gio::AppLaunchContext>,
+) -> Result<(), String> {
+    let editor = gio::AppInfo::default_for_type("text/plain", false)
+        .ok_or_else(|| "No default text editor is configured.".to_owned())?;
+    editor
+        .launch(std::slice::from_ref(file), context)
+        .map_err(|error| error.to_string())
+}
+
+fn research_page(window: &gtk::ApplicationWindow) -> gtk::Box {
+    let page = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    page.add_css_class("prefs-page-body");
+    let row = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+    for class in ["prefs-group", "prefs-row", "last"] {
+        row.add_css_class(class);
+    }
+    let title = label("Run Commands history", "prefs-row-title");
+    title.set_hexpand(true);
+    row.append(&title);
+    let edit = gtk::Button::with_label("Edit");
+    edit.add_css_class("prefs-btn");
+    edit.update_property(&[gtk::accessible::Property::Label(
+        "Edit Run Commands history",
+    )]);
+    row.append(&edit);
+    page.append(&row);
+
+    let status = label("", "error");
+    status.set_visible(false);
+    page.append(&status);
+    let window = window.downgrade();
+    edit.connect_clicked(move |_| {
+        let result = (|| -> Result<(), String> {
+            let path = crate::history::history_path()
+                .ok_or("Could not locate the command history file.")?;
+            match std::fs::metadata(&path) {
+                Ok(metadata) if metadata.is_file() => {}
+                Ok(_) => return Err("The command history path is not a file.".into()),
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                    return Err("No command history file exists yet.".into());
+                }
+                Err(error) => return Err(format!("Could not access command history. {error}")),
+            }
+            let context = window
+                .upgrade()
+                .map(|window| WidgetExt::display(&window).app_launch_context());
+            launch_text_editor(
+                &gio::File::for_path(path),
+                context.as_ref().map(|context| context.upcast_ref()),
+            )
+        })();
+        status.set_visible(result.is_err());
+        if let Err(error) = result {
+            status.set_text(&error);
+        }
+    });
+    page
+}
+
 fn append_dependency_warning(page: &gtk::Box, program: &'static str, message: &str) {
     let warning = label(message, "error");
     warning.set_visible(false);
@@ -210,11 +271,7 @@ fn fallback_page() -> gtk::Box {
                     std::fs::write(&path, "{}\n").map_err(|error| error.to_string())?;
                 }
                 let file = gio::File::for_path(&path);
-                let editor = gio::AppInfo::default_for_type("text/plain", false)
-                    .ok_or("No default text editor is configured")?;
-                editor
-                    .launch(&[file], None::<&gio::AppLaunchContext>)
-                    .map_err(|error| error.to_string())
+                launch_text_editor(&file, None)
             })();
             if let Some(status) = status.upgrade() {
                 match result {
@@ -797,6 +854,7 @@ fn build(app: &gtk::Application) {
         Some("notifications"),
         "Notifications",
     );
+    stack.add_titled(&research_page(&window), Some("research"), "Research");
     stack.add_titled(&mouse::build(), Some("mouse"), "Mouse");
     stack.add_titled(&keyboard::build(&window), Some("keyboard"), "Keyboard");
     stack.add_titled(&printers::build(), Some("printers"), "Printers");
@@ -814,16 +872,13 @@ fn build(app: &gtk::Application) {
             "Appearance",
             "preferences-desktop-wallpaper-symbolic",
         ),
-        (
-            "applications",
-            "Applications",
-            "view-app-grid-symbolic",
-        ),
+        ("applications", "Applications", "view-app-grid-symbolic"),
         (
             "notifications",
             "Notifications",
             "preferences-system-notifications-symbolic",
         ),
+        ("research", "Research", "system-search-symbolic"),
         ("mouse", "Mouse", "input-mouse-symbolic"),
         ("keyboard", "Keyboard", "input-keyboard-symbolic"),
         ("printers", "Printers", "printer-symbolic"),

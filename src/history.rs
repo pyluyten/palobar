@@ -20,7 +20,7 @@ pub struct RunHistoryEntry {
     pub count: u64,
 }
 
-fn history_path() -> Option<PathBuf> {
+pub(crate) fn history_path() -> Option<PathBuf> {
     if let Some(state_home) = std::env::var_os("XDG_STATE_HOME") {
         let path = PathBuf::from(state_home);
         if path.is_absolute() {

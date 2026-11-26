@@ -1,4 +1,4 @@
-use super::label;
+use super::{label, launch_text_editor};
 use crate::config::{read_config, update_config};
 use crate::dock::ALWAYS_VISIBLE_KEY;
 use gtk::prelude::*;
@@ -42,15 +42,8 @@ async fn load_preview() -> Result<(gio::File, String, bool), String> {
 }
 
 fn open_editor(window: &gtk::ApplicationWindow, file: &gio::File) {
-    let result = gio::AppInfo::default_for_type("text/plain", false)
-        .ok_or_else(|| "No default text editor is configured.".to_owned())
-        .and_then(|editor| {
-            let context = WidgetExt::display(window).app_launch_context();
-            editor
-                .launch(&[file.clone()], Some(&context))
-                .map_err(|error| error.to_string())
-        });
-    if let Err(error) = result {
+    let context = WidgetExt::display(window).app_launch_context();
+    if let Err(error) = launch_text_editor(file, Some(context.upcast_ref())) {
         let dialog = gtk::MessageDialog::builder()
             .transient_for(window)
             .modal(true)
