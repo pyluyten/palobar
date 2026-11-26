@@ -237,6 +237,11 @@ impl Dialog {
             .build();
         entry.set_text(workspace.name.as_deref().unwrap_or_default());
         let rename = button("Rename");
+        let revert = gtk::Button::from_icon_name("edit-undo-symbolic");
+        revert.add_css_class("workspace-dialog-button");
+        revert.set_tooltip_text(Some("Revert"));
+        revert.update_property(&[gtk::accessible::Property::Label("Revert workspace name")]);
+        revert.set_sensitive(workspace.name.is_some());
         let cancel = button("Cancel");
         cancel.set_visible(false);
         let stop_editing = {
@@ -261,40 +266,47 @@ impl Dialog {
             }
         };
         let current = Rc::new(RefCell::new(workspace.name));
-        let save = {
-            let (header, heading, entry) =
-                (header.downgrade(), heading.downgrade(), entry.downgrade());
+        let change_name = {
+            let (header, heading, revert) =
+                (header.downgrade(), heading.downgrade(), revert.downgrade());
             let dialog = Rc::downgrade(self);
             let stop_editing = stop_editing.clone();
             let current = current.clone();
             let id = workspace.id;
-            move || {
-                let (Some(header_widget), Some(entry_widget)) = (header.upgrade(), entry.upgrade())
-                else {
+            move |name: Option<String>| {
+                let Some(header_widget) = header.upgrade() else {
                     return;
                 };
-                let name = entry_widget.text().trim().to_owned();
-                if name.is_empty() || !header_widget.is_sensitive() {
+                if !header_widget.is_sensitive() {
                     return;
                 }
-                if current.borrow().as_deref() == Some(name.as_str()) {
+                if *current.borrow() == name {
                     stop_editing();
                     return;
                 }
+                let (action, error_message) = match &name {
+                    Some(name) => (
+                        json!({"SetWorkspaceName": {"name": name, "workspace": {"Id": id}}}),
+                        "Could not rename the workspace.",
+                    ),
+                    None => (
+                        json!({"UnsetWorkspaceName": {"reference": {"Id": id}}}),
+                        "Could not revert the workspace name.",
+                    ),
+                };
                 header_widget.set_sensitive(false);
-                let (header, heading, dialog, current, stop_editing, output) = (
+                let (header, heading, revert, dialog, current, stop_editing) = (
                     header.clone(),
                     heading.clone(),
+                    revert.clone(),
                     dialog.clone(),
                     current.clone(),
                     stop_editing.clone(),
-                    output.clone(),
                 );
+                let title = format!("{}{output}", name.as_deref().unwrap_or(&fallback));
                 glib::spawn_future_local(async move {
-                    let requested_name = name.clone();
-                    let result = gio::spawn_blocking(move || request(json!({
-                        "Action": {"SetWorkspaceName": {"name": requested_name, "workspace": {"Id": id}}}
-                    }))).await;
+                    let result =
+                        gio::spawn_blocking(move || request(json!({"Action": action}))).await;
                     let (Some(header), Some(dialog)) = (header.upgrade(), dialog.upgrade()) else {
                         return;
                     };
@@ -302,23 +314,39 @@ impl Dialog {
                     match result {
                         Ok(Ok(_)) => {
                             if let Some(heading) = heading.upgrade() {
-                                heading.set_text(&format!("{name}{output}"));
+                                heading.set_text(&title);
                             }
-                            current.replace(Some(name));
+                            if let Some(revert) = revert.upgrade() {
+                                revert.set_sensitive(name.is_some());
+                            }
+                            let reverted = name.is_none();
+                            current.replace(name);
                             stop_editing();
                             dialog.status("");
+                            if reverted {
+                                dialog.load();
+                            }
                         }
-                        Ok(Err(error)) => {
-                            dialog.status(&format!("Could not rename the workspace. {error}"))
-                        }
-                        Err(_) => dialog.status("Could not rename the workspace."),
+                        Ok(Err(error)) => dialog.status(&format!("{error_message} {error}")),
+                        Err(_) => dialog.status(error_message),
                     }
                 });
             }
         };
+        revert.connect_clicked({
+            let change_name = change_name.clone();
+            move |_| change_name(None)
+        });
+        let save = move |entry: &gtk::Entry| {
+            let text = entry.text();
+            let name = text.trim();
+            if !name.is_empty() {
+                change_name(Some(name.to_owned()));
+            }
+        };
         entry.connect_activate({
             let save = save.clone();
-            move |_| save()
+            move |entry| save(entry)
         });
         cancel.connect_clicked(move |_| stop_editing());
         rename.connect_clicked({
@@ -331,7 +359,7 @@ impl Dialog {
                     return;
                 };
                 if WidgetExt::is_visible(&entry) {
-                    save();
+                    save(&entry);
                     return;
                 }
                 entry.set_text(current.borrow().as_deref().unwrap_or_default());
@@ -346,6 +374,7 @@ impl Dialog {
         header.append(&heading);
         header.append(&entry);
         header.append(&rename);
+        header.append(&revert);
         header.append(&cancel);
         section.append(&header);
 
