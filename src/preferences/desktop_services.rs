@@ -419,19 +419,154 @@ async fn set_palobar_notifications(enabled: bool) -> Result<(), String> {
 pub(super) fn authentication(owner: &gtk::Box) -> gtk::Label {
     status(owner, || async {
         match gio::spawn_blocking(authentication_agents).await {
-            Ok(Ok(agents)) if !agents.is_empty() => {
-                format!("Running PolicyKit agents detected\n{}", agents.join("\n"))
-            }
-            Ok(Ok(_)) => "No known PolicyKit authentication agent detected for this user.".into(),
+            Ok(Ok(report)) => report,
             _ => "Could not check for running PolicyKit authentication agents.".into(),
         }
     })
 }
 
-fn authentication_agents() -> std::io::Result<Vec<String>> {
+struct AuthenticationAgent {
+    executable: &'static str,
+    aliases: &'static [&'static str],
+    title: &'static str,
+}
+
+const AUTHENTICATION_AGENTS: &[AuthenticationAgent] = &[
+    AuthenticationAgent {
+        executable: "hyprpolkitagent",
+        aliases: &["hyprpolkitagent"],
+        title: "Hyprland PolicyKit Agent",
+    },
+    AuthenticationAgent {
+        executable: "polkit-kde-authentication-agent-1",
+        aliases: &["polkit-kde-authentication-agent-1"],
+        title: "KDE PolicyKit Agent",
+    },
+    AuthenticationAgent {
+        executable: "plasma-polkit-agent",
+        aliases: &["plasma-polkit-agent"],
+        title: "KDE Plasma PolicyKit Agent",
+    },
+    AuthenticationAgent {
+        executable: "polkit-gnome-authentication-agent-1",
+        aliases: &["polkit-gnome-authentication-agent-1"],
+        title: "GNOME PolicyKit Agent",
+    },
+    AuthenticationAgent {
+        executable: "lxqt-policykit-agent",
+        aliases: &["lxqt-policykit-agent"],
+        title: "LXQt PolicyKit Agent",
+    },
+    AuthenticationAgent {
+        executable: "xfce-polkit",
+        aliases: &["xfce-polkit"],
+        title: "Xfce PolicyKit Agent",
+    },
+    AuthenticationAgent {
+        executable: "soteria",
+        aliases: &["soteria"],
+        title: "Soteria PolicyKit Agent",
+    },
+    AuthenticationAgent {
+        executable: "polkit-mate-authentication-agent-1",
+        aliases: &["polkit-mate-authentication-agent-1", "mate-polkit"],
+        title: "MATE PolicyKit Agent",
+    },
+    AuthenticationAgent {
+        executable: "lxpolkit",
+        aliases: &["lxpolkit"],
+        title: "LXDE PolicyKit Agent",
+    },
+    AuthenticationAgent {
+        executable: "sway-polkit",
+        aliases: &["sway-polkit"],
+        title: "Sway PolicyKit Agent",
+    },
+    AuthenticationAgent {
+        executable: "polkit-dumb-agent",
+        aliases: &["polkit-dumb-agent"],
+        title: "PolicyKit Dumb Agent",
+    },
+    AuthenticationAgent {
+        executable: "gnome-shell",
+        aliases: &["gnome-shell"],
+        title: "GNOME Shell PolicyKit Agent",
+    },
+];
+
+#[derive(Default)]
+struct AuthenticationAgentStatus {
+    running: BTreeSet<String>,
+    available: BTreeSet<String>,
+}
+
+impl AuthenticationAgentStatus {
+    fn message(self) -> String {
+        let mut sections = Vec::new();
+        if self.running.is_empty() {
+            sections.push("No known PolicyKit authentication agent is running.".to_owned());
+        } else {
+            sections.push(format!(
+                "Running PolicyKit agents\n{}",
+                self.running.into_iter().collect::<Vec<_>>().join("\n")
+            ));
+        }
+        if self.available.is_empty() {
+            sections.push(
+                "No additional known PolicyKit agent executable was found in PATH or standard libexec locations."
+                    .into(),
+            );
+        } else {
+            sections.push(format!(
+                "Available to start (choose one)\n{}\n\nOnly one agent should normally run in a session.",
+                self.available.into_iter().collect::<Vec<_>>().join("\n")
+            ));
+        }
+        sections.join("\n\n")
+    }
+}
+
+fn authentication_agent_candidates(executable: &str) -> Vec<std::path::PathBuf> {
+    let mut candidates = vec![
+        std::path::PathBuf::from("/usr/libexec").join(executable),
+        std::path::PathBuf::from("/usr/lib").join(executable),
+    ];
+    if executable == "polkit-gnome-authentication-agent-1" {
+        candidates.push("/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1".into());
+    }
+    if executable == "hyprpolkitagent" {
+        candidates.push("/usr/lib/hyprpolkitagent/hyprpolkitagent".into());
+    }
+    if executable == "lxqt-policykit-agent" {
+        candidates.push("/usr/lib/lxqt-policykit-agent/lxqt-policykit-agent".into());
+    }
+    if executable == "xfce-polkit" {
+        candidates.push("/usr/lib/xfce-polkit/xfce-polkit".into());
+    }
+    if executable == "soteria" {
+        candidates.push("/usr/lib/soteria/soteria".into());
+    }
+    candidates
+}
+
+fn authentication_agent_program(executable: &str) -> Option<std::path::PathBuf> {
+    if let Some(path) = glib::find_program_in_path(executable) {
+        return Some(path);
+    }
+    let candidates = authentication_agent_candidates(executable);
+    candidates.into_iter().find(|path| {
+        path.is_file()
+            && std::fs::metadata(path).is_ok_and(|metadata| {
+                use std::os::unix::fs::PermissionsExt;
+                metadata.permissions().mode() & 0o111 != 0
+            })
+    })
+}
+
+fn authentication_agents() -> std::io::Result<String> {
     // PolicyKit does not expose an API for listing registered authentication agents.
     let user = unsafe { libc::geteuid() };
-    let mut agents = BTreeSet::new();
+    let mut running_names = BTreeSet::new();
     for entry in std::fs::read_dir("/proc")?.flatten() {
         if !entry
             .file_name()
@@ -454,22 +589,62 @@ fn authentication_agents() -> std::io::Result<Vec<String>> {
             .strip_prefix('.')
             .and_then(|name| name.strip_suffix("-wrapped"))
             .unwrap_or(name);
-        let agent = match name {
-            "polkit-gnome-authentication-agent-1" => "GNOME PolicyKit Agent",
-            "gnome-shell" => "GNOME Shell",
-            "polkit-kde-authentication-agent-1" | "plasma-polkit-agent" => "KDE PolicyKit Agent",
-            "lxqt-policykit-agent" => "LXQt PolicyKit Agent",
-            "lxpolkit" => "LXDE PolicyKit Agent",
-            "polkit-mate-authentication-agent-1" | "mate-polkit" => "MATE PolicyKit Agent",
-            "xfce-polkit" => "Xfce PolicyKit Agent",
-            "hyprpolkitagent" => "Hyprland PolicyKit Agent",
-            "sway-polkit" => "Sway PolicyKit Agent",
-            "polkit-dumb-agent" => "PolicyKit Dumb Agent",
-            _ => continue,
-        };
-        agents.insert(agent.to_owned());
+        running_names.insert(name.to_owned());
     }
-    Ok(agents.into_iter().collect())
+    let running = AUTHENTICATION_AGENTS
+        .iter()
+        .filter_map(|agent| {
+            agent
+                .aliases
+                .iter()
+                .find(|alias| running_names.contains(**alias))
+                .map(|name| format!("{} ({name})", agent.title))
+        })
+        .collect();
+    let available = AUTHENTICATION_AGENTS
+        .iter()
+        .filter(|agent| {
+            !agent
+                .aliases
+                .iter()
+                .any(|name| running_names.contains(*name))
+        })
+        .filter_map(|agent| {
+            authentication_agent_program(agent.executable)
+                .map(|path| format!("{}: {}", agent.title, path.display()))
+        })
+        .collect();
+    Ok(AuthenticationAgentStatus { running, available }.message())
+}
+
+#[cfg(test)]
+mod desktop_service_tests {
+    use super::{authentication_agent_candidates, AuthenticationAgentStatus};
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn policykit_agent_report_distinguishes_running_and_available_agents() {
+        let report = AuthenticationAgentStatus {
+            running: BTreeSet::from([
+                "KDE PolicyKit Agent (polkit-kde-authentication-agent-1)".into()
+            ]),
+            available: BTreeSet::from(["Soteria PolicyKit Agent: /usr/bin/soteria".into()]),
+        }
+        .message();
+        assert!(report.contains("Running PolicyKit agents"));
+        assert!(report.contains("polkit-kde-authentication-agent-1"));
+        assert!(report.contains("Available to start (choose one)"));
+        assert!(report.contains("/usr/bin/soteria"));
+        assert!(report.contains("Only one agent should normally run"));
+    }
+
+    #[test]
+    fn policykit_agent_lookup_checks_packaged_libexec_locations() {
+        assert!(
+            authentication_agent_candidates("polkit-gnome-authentication-agent-1")
+                .contains(&"/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1".into())
+        );
+    }
 }
 
 #[cfg(test)]
