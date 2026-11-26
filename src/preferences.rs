@@ -817,7 +817,7 @@ fn build(app: &gtk::Application) {
         (
             "applications",
             "Applications",
-            "application-x-executable-symbolic",
+            "view-app-grid-symbolic",
         ),
         (
             "notifications",
