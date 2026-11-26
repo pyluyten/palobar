@@ -1,4 +1,4 @@
-use super::{choose_image, label};
+use super::{choose_image, desktop_services, label};
 use crate::background::{mode_index, Background, MODES};
 use crate::config::{read_config, update_config};
 use crate::lockscreen;
@@ -158,6 +158,8 @@ fn append_info(row: &gtk::Box, title: &str, hint: &str) -> gtk::Label {
 pub(super) fn build(window: &gtk::ApplicationWindow) -> gtk::ScrolledWindow {
     let page = gtk::Box::new(gtk::Orientation::Vertical, 12);
     page.add_css_class("prefs-page-body");
+    page.append(&label("Authentication", "prefs-group-title"));
+    page.append(&desktop_services::authentication(&page));
     page.append(&label("Lock Screen", "prefs-group-title"));
     let availability = label("", "prefs-muted");
     page.append(&availability);

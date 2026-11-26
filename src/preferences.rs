@@ -1,5 +1,7 @@
 #[path = "preferences/appearance.rs"]
 mod appearance;
+#[path = "preferences/desktop_services.rs"]
+mod desktop_services;
 #[path = "preferences/keyboard.rs"]
 mod keyboard;
 #[path = "preferences/mouse.rs"]
@@ -679,7 +681,13 @@ fn build(app: &gtk::Application) {
         .selection_mode(gtk::SelectionMode::Browse)
         .build();
     navigation.add_css_class("prefs-navigation");
-    sidebar.append(&navigation);
+    let navigation_scroll = gtk::ScrolledWindow::builder()
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .propagate_natural_width(true)
+        .vexpand(true)
+        .child(&navigation)
+        .build();
+    sidebar.append(&navigation_scroll);
     root.append(&sidebar);
 
     let pane = gtk::Box::new(gtk::Orientation::Vertical, 0);
@@ -711,6 +719,16 @@ fn build(app: &gtk::Application) {
         Some("appearance"),
         "Appearance",
     );
+    stack.add_titled(
+        &desktop_services::applications(),
+        Some("applications"),
+        "Applications",
+    );
+    stack.add_titled(
+        &desktop_services::notifications(),
+        Some("notifications"),
+        "Notifications",
+    );
     stack.add_titled(&mouse::build(), Some("mouse"), "Mouse");
     stack.add_titled(&keyboard::build(&window), Some("keyboard"), "Keyboard");
     stack.add_titled(&printers::build(), Some("printers"), "Printers");
@@ -726,6 +744,16 @@ fn build(app: &gtk::Application) {
             "appearance",
             "Appearance",
             "preferences-desktop-wallpaper-symbolic",
+        ),
+        (
+            "applications",
+            "Applications",
+            "application-x-executable-symbolic",
+        ),
+        (
+            "notifications",
+            "Notifications",
+            "preferences-system-notifications-symbolic",
         ),
         ("mouse", "Mouse", "input-mouse-symbolic"),
         ("keyboard", "Keyboard", "input-keyboard-symbolic"),
