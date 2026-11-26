@@ -160,6 +160,20 @@ fn label(text: &str, class: &str) -> gtk::Label {
     label
 }
 
+fn append_dependency_warning(page: &gtk::Box, program: &'static str, message: &str) {
+    let warning = label(message, "error");
+    warning.set_visible(false);
+    page.append(&warning);
+    page.connect_map({
+        let warning = warning.downgrade();
+        move |_| {
+            if let Some(warning) = warning.upgrade() {
+                warning.set_visible(glib::find_program_in_path(program).is_none());
+            }
+        }
+    });
+}
+
 fn fallback_page() -> gtk::Box {
     let page = gtk::Box::new(gtk::Orientation::Vertical, 12);
     page.add_css_class("prefs-page-body");

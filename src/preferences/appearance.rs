@@ -1,4 +1,4 @@
-use super::label;
+use super::{append_dependency_warning, label};
 use crate::config::{read_config, update_config};
 use gtk::prelude::*;
 use gtk::{gdk, gdk_pixbuf, gio, glib, pango};
@@ -21,8 +21,7 @@ const ACCENTS: [(&str, &str, &str); 9] = [
     ("slate", "Slate", "#6f8396"),
 ];
 
-fn section(page: &gtk::Box, title: &str) -> gtk::Box {
-    page.append(&label(title, "prefs-group-title"));
+fn section_group(page: &gtk::Box) -> gtk::Box {
     let group = gtk::Box::new(gtk::Orientation::Vertical, 0);
     group.add_css_class("prefs-group");
     page.append(&group);
@@ -140,7 +139,8 @@ fn bind_choices(
 }
 
 fn desktop_appearance(page: &gtk::Box, status: &gtk::Label) {
-    let styles = section(page, "Style");
+    page.append(&label("Style", "prefs-group-title"));
+    let styles = section_group(page);
     let style_row = row(&styles, true);
     style_row.set_halign(gtk::Align::Center);
     let choices = [
@@ -152,7 +152,8 @@ fn desktop_appearance(page: &gtk::Box, status: &gtk::Label) {
     }
     bind_choices(&styles, status, "color-scheme", &choices);
 
-    let accents = section(page, "Accent Color");
+    page.append(&label("Accent Color", "prefs-group-title"));
+    let accents = section_group(page);
     let flow = gtk::FlowBox::builder()
         .selection_mode(gtk::SelectionMode::None)
         .max_children_per_line(ACCENTS.len() as u32)
@@ -265,7 +266,13 @@ fn wallpaper(page: &gtk::Box, window: &gtk::ApplicationWindow, status: &gtk::Lab
         .unwrap_or_else(|| gdk::RGBA::parse(DEFAULT_COLOR).expect("valid default background"));
     let color = Rc::new(Cell::new(initial_color));
 
-    let group = section(page, "Background");
+    page.append(&label("Background", "prefs-group-title"));
+    append_dependency_warning(
+        page,
+        "swaybg",
+        "swaybg was not found in PATH. Desktop background settings require swaybg.",
+    );
+    let group = section_group(page);
     let preview_row = row(&group, false);
     preview_row.set_halign(gtk::Align::Center);
     let preview = gtk::Overlay::new();

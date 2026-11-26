@@ -1,4 +1,4 @@
-use super::label;
+use super::{append_dependency_warning, label};
 use crate::config::{read_config, update_config};
 use gtk::prelude::*;
 use gtk::{gio, glib};
@@ -152,6 +152,11 @@ pub(super) fn build() -> gtk::ScrolledWindow {
     let content = gtk::Box::new(gtk::Orientation::Vertical, 14);
     content.add_css_class("prefs-page-body");
     content.append(&label("Power Saving", "prefs-group-title"));
+    append_dependency_warning(
+        &content,
+        "swayidle",
+        "swayidle was not found in PATH. Automatic screen blanking and suspend require swayidle.",
+    );
     let status = label("", "error");
     status.set_visible(false);
     content.append(&status);

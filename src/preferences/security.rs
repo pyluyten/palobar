@@ -1,4 +1,4 @@
-use super::{choose_image, desktop_services, label};
+use super::{append_dependency_warning, choose_image, desktop_services, label};
 use crate::background::{mode_index, Background, MODES};
 use crate::config::{read_config, update_config};
 use crate::lockscreen;
@@ -161,6 +161,11 @@ pub(super) fn build(window: &gtk::ApplicationWindow) -> gtk::ScrolledWindow {
     page.append(&label("Authentication", "prefs-group-title"));
     page.append(&desktop_services::authentication(&page));
     page.append(&label("Lock Screen", "prefs-group-title"));
+    append_dependency_warning(
+        &page,
+        "swayidle",
+        "swayidle was not found in PATH. Automatic screen locking requires swayidle.",
+    );
     let availability = label("", "prefs-muted");
     page.append(&availability);
     let status = label("", "error");
