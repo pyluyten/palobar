@@ -5,25 +5,24 @@ ____
 
 * Top Panel
     - [x] notification tray
-        - notification stacking
+        - [x] notification stacking
     - [x] media player
     - [x] workspace button
     - [x] clipboard+
-    - [ ] battery
+    - [x] battery
     - [ ] power profile
     - [x] dark, light
-    - [ ] night mode
+    - [ ] night mode - meh!
     - [ ] vpn
     - [x] screenshot (region)
-    - [ ] bluetooth
+    - [x] bluetooth
 * Launcher
     - [x] text entry
     - [x] dock
-        + add a command to toggle dock
+        + [x] add a command to toggle dock
     - [x] pages
 * [x] Command launcher
-    - command launcher history dialog
-    - more?
+    - [x] command launcher history edition for V1 (text..)
 
 
 ## about settings
@@ -33,7 +32,7 @@ ____
 | gnome-settings    | palobar                                      |
 | ----------------- | -------------------------------------------- |
 | wifi              | todo. but quicksettings already provide 99%. |
-| network           | todo. but minor                              |
+| network           | i would prefer some nm gui                   |
 | bluetooth         | **todo**                                     |
 | screens           | ☑ *Done* for v1.                             |
 | sound             | ☑ *Done*.                                    |
@@ -56,7 +55,6 @@ ____
 | private -camera   | todo                                         |
 | private -security | todo                                         |
 | system-locale     | todo                                         |
-| system-datetime   | todo                                         |
 | system-datetime   | todo                                         |
 | system-users      | todo                                         |
 | system-ssh        | todo                                         |
