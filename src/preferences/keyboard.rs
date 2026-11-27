@@ -682,7 +682,7 @@ fn render_global_shortcuts(list: &gtk::Box, window: &gtk::ApplicationWindow) {
         list.remove(&child);
     }
     let Some((registry, schema)) = shortcut_settings() else {
-        row(list, true).append(&label(
+        list.append(&label(
             "The GNOME Global Shortcuts settings schemas are unavailable.",
             "prefs-muted",
         ));
@@ -700,9 +700,14 @@ fn render_global_shortcuts(list: &gtk::Box, window: &gtk::ApplicationWindow) {
         let Some(shortcuts) = settings.value("shortcuts").get::<ApplicationShortcuts>() else {
             continue;
         };
+        if shortcuts.is_empty() {
+            continue;
+        }
         let name = gio::DesktopAppInfo::new(&format!("{app_id}.desktop"))
             .map_or_else(|| app_id.to_string(), |app| app.display_name().into());
-        for (id, properties) in shortcuts {
+        let application = group(list, &name);
+        let count = shortcuts.len();
+        for (index, (id, properties)) in shortcuts.into_iter().enumerate() {
             let description = properties
                 .get("description")
                 .and_then(glib::Variant::str)
@@ -714,7 +719,7 @@ fn render_global_shortcuts(list: &gtk::Box, window: &gtk::ApplicationWindow) {
             let title = format!("{name} — {description}");
             let details = gtk::Box::new(gtk::Orientation::Vertical, 4);
             details.set_hexpand(true);
-            details.append(&label(&title, "prefs-row-title"));
+            details.append(&label(description, "prefs-row-title"));
             let display = bindings
                 .iter()
                 .map(|binding| {
@@ -733,7 +738,7 @@ fn render_global_shortcuts(list: &gtk::Box, window: &gtk::ApplicationWindow) {
                 },
                 "prefs-muted",
             ));
-            let row = row(list, false);
+            let row = row(&application, index + 1 == count);
             row.append(&details);
             let edit = gtk::Button::with_label("Edit");
             edit.add_css_class("prefs-btn");
@@ -761,10 +766,8 @@ fn render_global_shortcuts(list: &gtk::Box, window: &gtk::ApplicationWindow) {
             row.append(&edit);
         }
     }
-    if let Some(last) = list.last_child() {
-        last.add_css_class("last");
-    } else {
-        row(list, true).append(&label(
+    if list.first_child().is_none() {
+        list.append(&label(
             "No applications have registered global shortcuts.",
             "prefs-muted",
         ));
@@ -772,8 +775,10 @@ fn render_global_shortcuts(list: &gtk::Box, window: &gtk::ApplicationWindow) {
 }
 
 fn global_shortcuts(page: &gtk::Box, window: &glib::WeakRef<gtk::ApplicationWindow>) {
-    let list = group(page, "Global Shortcuts");
+    page.append(&label("Global Shortcuts", "prefs-group-title"));
     page.append(&desktop_services::status(page, global_shortcuts_status));
+    let list = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    page.append(&list);
     let window = window.clone();
     page.connect_map(move |_| {
         if let Some(window) = window.upgrade() {
@@ -782,13 +787,32 @@ fn global_shortcuts(page: &gtk::Box, window: &glib::WeakRef<gtk::ApplicationWind
     });
 }
 
+fn expandable_section(page: &gtk::Box, title: &str) -> gtk::Box {
+    let title = label(title, "prefs-row-title");
+    title.set_margin_top(12);
+    title.set_margin_bottom(12);
+    let body = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    body.set_margin_start(16);
+    body.set_margin_end(16);
+    body.set_margin_bottom(16);
+    let section = gtk::Expander::builder()
+        .label_widget(&title)
+        .child(&body)
+        .build();
+    section.add_css_class("prefs-group");
+    section.add_css_class("prefs-keyboard-section");
+    page.append(&section);
+    body
+}
+
 pub(super) fn build(window: &gtk::ApplicationWindow) -> gtk::ScrolledWindow {
     let page = gtk::Box::new(gtk::Orientation::Vertical, 12);
     page.add_css_class("prefs-page-body");
     let window = window.downgrade();
-    let layouts = group(&page, "Keyboard Layouts");
+    let layout = expandable_section(&page, "Layout");
+    let layouts = group(&layout, "Keyboard Layouts");
     row(&layouts, true).append(&label("Loading keyboard layouts…", "prefs-muted"));
-    page.connect_map({
+    layout.connect_map({
         let window = window.clone();
         move |_| refresh(&layouts, &window, None)
     });
@@ -819,8 +843,13 @@ pub(super) fn build(window: &gtk::ApplicationWindow) -> gtk::ScrolledWindow {
             });
         }
     });
-    page.append(&browse);
-    let shortcuts = gtk::Button::with_mnemonic("Show keyboard _shortcuts");
+    layout.append(&browse);
+    let sources = group(&layout, "Input Sources");
+    input_source(&layout, &sources, &window, "IBus", IBUS, false);
+    input_source(&layout, &sources, &window, "Fcitx", FCITX, true);
+
+    let shortcut_section = expandable_section(&page, "Shortcuts");
+    let shortcuts = gtk::Button::with_label("Show Current Shortcuts");
     shortcuts.add_css_class("prefs-btn");
     shortcuts.set_halign(gtk::Align::Start);
     shortcuts.connect_clicked({
@@ -834,11 +863,8 @@ pub(super) fn build(window: &gtk::ApplicationWindow) -> gtk::ScrolledWindow {
             });
         }
     });
-    page.append(&shortcuts);
-    global_shortcuts(&page, &window);
-    let sources = group(&page, "Input Sources");
-    input_source(&page, &sources, &window, "IBus", IBUS, false);
-    input_source(&page, &sources, &window, "Fcitx", FCITX, true);
+    shortcut_section.append(&shortcuts);
+    global_shortcuts(&shortcut_section, &window);
     gtk::ScrolledWindow::builder()
         .hscrollbar_policy(gtk::PolicyType::Never)
         .vexpand(true)
