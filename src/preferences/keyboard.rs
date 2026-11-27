@@ -1,8 +1,9 @@
-use super::label;
+use super::{desktop_services, label};
 use gtk::prelude::*;
-use gtk::{gio, glib};
+use gtk::{gdk, gio, glib};
 use serde::Deserialize;
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -426,6 +427,361 @@ fn input_source(
     });
 }
 
+async fn global_shortcuts_status() -> String {
+    let Ok(bus) = gio::bus_get_future(gio::BusType::Session).await else {
+        return "Could not connect to the session bus to check Global Shortcuts.".into();
+    };
+    let result = bus
+        .call_future(
+            Some("org.freedesktop.portal.Desktop"),
+            "/org/freedesktop/portal/desktop",
+            "org.freedesktop.DBus.Properties",
+            "Get",
+            Some(&("org.freedesktop.portal.GlobalShortcuts", "version").to_variant()),
+            Some(glib::VariantTy::new("(v)").unwrap()),
+            gio::DBusCallFlags::NONE,
+            2000,
+        )
+        .await;
+    match result {
+        Ok(reply) if reply.child_get::<glib::Variant>(0).get::<u32>().is_some_and(|version| version > 0) => {
+            "The Global Shortcuts portal is available.".into()
+        }
+        Err(error) if error.matches(gio::DBusError::TimedOut) || error.matches(gio::IOErrorEnum::TimedOut) => {
+            "The Global Shortcuts portal did not respond.".into()
+        }
+        _ => "Global Shortcuts is unavailable. Check that xdg-desktop-portal-gnome is installed and configured for this Niri session.".into(),
+    }
+}
+
+const SHORTCUT_SCHEMA: &str = "org.gnome.settings-daemon.global-shortcuts";
+type ApplicationShortcuts = Vec<(String, HashMap<String, glib::Variant>)>;
+
+fn shortcut_settings() -> Option<(gio::Settings, gio::SettingsSchema)> {
+    let source = gio::SettingsSchemaSource::default()?;
+    let registry = source.lookup(SHORTCUT_SCHEMA, true)?;
+    let app = source.lookup(&format!("{SHORTCUT_SCHEMA}.application"), true)?;
+    if !registry.has_key("applications") || !app.has_key("shortcuts") {
+        return None;
+    }
+    Some((
+        gio::Settings::new_full(&registry, gio::SettingsBackend::NONE, None),
+        app,
+    ))
+}
+
+fn accelerator_list(text: &str) -> Result<Vec<String>, String> {
+    if text.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut shortcuts = Vec::new();
+    for item in text.split(',').map(str::trim) {
+        let (key, modifiers) = gtk::accelerator_parse(item)
+            .filter(|(key, modifiers)| gtk::accelerator_valid(*key, *modifiers))
+            .ok_or_else(|| format!("Invalid shortcut: {item}"))?;
+        let accelerator = gtk::accelerator_name(key, modifiers).to_string();
+        if !shortcuts.contains(&accelerator) {
+            shortcuts.push(accelerator);
+        }
+    }
+    Ok(shortcuts)
+}
+
+async fn save_shortcut(
+    settings: &gio::Settings,
+    app_id: &str,
+    shortcut_id: &str,
+    shortcuts: Vec<String>,
+) -> Result<(), String> {
+    let bus = gio::bus_get_future(gio::BusType::Session)
+        .await
+        .map_err(|error| error.to_string())?;
+    let previous = settings.value("shortcuts");
+    let mut bindings = previous
+        .get::<ApplicationShortcuts>()
+        .ok_or("Unsupported GNOME shortcut format.")?;
+    let (_, properties) = bindings
+        .iter_mut()
+        .find(|(id, _)| id == shortcut_id)
+        .ok_or("This shortcut is no longer registered.")?;
+    properties.insert("shortcuts".into(), shortcuts.to_variant());
+    let updated = bindings.to_variant();
+    settings
+        .set_value("shortcuts", &updated)
+        .map_err(|error| error.to_string())?;
+    gio::Settings::sync();
+    let result = bus
+        .call_future(
+            Some("org.freedesktop.impl.portal.desktop.gnome"),
+            "/org/gnome/globalshortcuts",
+            "org.gnome.GlobalShortcutsRebind",
+            "RebindShortcuts",
+            Some(&(app_id, bindings).to_variant()),
+            Some(glib::VariantTy::UNIT),
+            gio::DBusCallFlags::NONE,
+            3000,
+        )
+        .await;
+    if let Err(error) = result {
+        if settings.value("shortcuts") == updated {
+            settings.set_value("shortcuts", &previous)
+                .map_err(|rollback| format!("Could not rebind the shortcut. {error} The previous setting could not be restored. {rollback}"))?;
+            gio::Settings::sync();
+        }
+        return Err(format!("Could not rebind the shortcut. {error}"));
+    }
+    Ok(())
+}
+
+fn edit_shortcut(
+    parent: &gtk::ApplicationWindow,
+    list: &gtk::Box,
+    settings: gio::Settings,
+    app_id: String,
+    id: String,
+    name: &str,
+    shortcuts: &[String],
+) {
+    let dialog = gtk::Dialog::builder()
+        .title("Edit Global Shortcut")
+        .transient_for(parent)
+        .destroy_with_parent(true)
+        .modal(true)
+        .default_width(460)
+        .build();
+    dialog.add_button("Cancel", gtk::ResponseType::Cancel);
+    dialog.add_button("Save", gtk::ResponseType::Accept);
+    let content = dialog.content_area();
+    content.set_spacing(8);
+    content.add_css_class("prefs-page-body");
+    content.append(&label(name, "prefs-row-title"));
+    let entry = gtk::Entry::builder()
+        .text(shortcuts.join(", "))
+        .placeholder_text("<Super>a")
+        .build();
+    entry.update_property(&[gtk::accessible::Property::Label("Shortcut bindings")]);
+    content.append(&entry);
+    content.append(&label(
+        "Separate multiple shortcuts with commas. Leave blank to disable.",
+        "prefs-muted",
+    ));
+    let record = gtk::ToggleButton::with_label("Record Shortcut");
+    record.set_halign(gtk::Align::Start);
+    content.append(&record);
+    let status = label("", "error");
+    status.set_visible(false);
+    content.append(&status);
+    record.connect_toggled(|button| {
+        button.set_label(if button.is_active() {
+            button.grab_focus();
+            "Press a Shortcut…"
+        } else {
+            "Record Shortcut"
+        });
+    });
+    record.connect_has_focus_notify(|button| {
+        if !button.has_focus() {
+            button.set_active(false);
+        }
+    });
+    let keys = gtk::EventControllerKey::new();
+    keys.connect_key_pressed({
+        let entry = entry.downgrade();
+        move |controller, key, _, modifiers| {
+            let Some(button) = controller.widget().and_downcast::<gtk::ToggleButton>() else {
+                return glib::Propagation::Proceed;
+            };
+            if !button.is_active() {
+                return glib::Propagation::Proceed;
+            }
+            if key == gdk::Key::Escape {
+                button.set_active(false);
+            } else {
+                let modifiers = modifiers & gtk::accelerator_get_default_mod_mask();
+                if gtk::accelerator_valid(key, modifiers) {
+                    if let Some(entry) = entry.upgrade() {
+                        entry.set_text(&gtk::accelerator_name(key.to_lower(), modifiers));
+                    }
+                    button.set_active(false);
+                }
+            }
+            glib::Propagation::Stop
+        }
+    });
+    record.add_controller(keys);
+    let pending = Rc::new(Cell::new(false));
+    dialog.connect_close_request({
+        let pending = pending.clone();
+        move |_| {
+            if pending.get() {
+                glib::Propagation::Stop
+            } else {
+                glib::Propagation::Proceed
+            }
+        }
+    });
+    let list = list.downgrade();
+    let parent = parent.downgrade();
+    dialog.connect_response(move |dialog, response| {
+        if pending.get() {
+            return;
+        }
+        if response != gtk::ResponseType::Accept {
+            dialog.destroy();
+            return;
+        }
+        let shortcuts = match accelerator_list(&entry.text()) {
+            Ok(shortcuts) => shortcuts,
+            Err(error) => {
+                status.set_text(&error);
+                status.set_visible(true);
+                return;
+            }
+        };
+        pending.set(true);
+        dialog.set_response_sensitive(gtk::ResponseType::Accept, false);
+        dialog.set_response_sensitive(gtk::ResponseType::Cancel, false);
+        let (dialog, status) = (dialog.downgrade(), status.downgrade());
+        let (settings, app_id, id, list, parent, pending) = (
+            settings.clone(),
+            app_id.clone(),
+            id.clone(),
+            list.clone(),
+            parent.clone(),
+            pending.clone(),
+        );
+        glib::spawn_future_local(async move {
+            let result = save_shortcut(&settings, &app_id, &id, shortcuts).await;
+            pending.set(false);
+            let Some(dialog) = dialog.upgrade() else {
+                return;
+            };
+            match result {
+                Ok(()) => {
+                    dialog.destroy();
+                    if let (Some(list), Some(parent)) = (list.upgrade(), parent.upgrade()) {
+                        render_global_shortcuts(&list, &parent);
+                    }
+                }
+                Err(error) => {
+                    dialog.set_response_sensitive(gtk::ResponseType::Accept, true);
+                    dialog.set_response_sensitive(gtk::ResponseType::Cancel, true);
+                    if let Some(status) = status.upgrade() {
+                        status.set_text(&error);
+                        status.set_visible(true);
+                    }
+                }
+            }
+        });
+    });
+    dialog.present();
+}
+
+fn render_global_shortcuts(list: &gtk::Box, window: &gtk::ApplicationWindow) {
+    while let Some(child) = list.first_child() {
+        list.remove(&child);
+    }
+    let Some((registry, schema)) = shortcut_settings() else {
+        row(list, true).append(&label(
+            "The GNOME Global Shortcuts settings schemas are unavailable.",
+            "prefs-muted",
+        ));
+        return;
+    };
+    let mut apps: Vec<_> = registry.strv("applications").into_iter().collect();
+    apps.sort_unstable();
+    apps.dedup();
+    for app_id in apps {
+        if app_id.is_empty() || app_id.contains('/') {
+            continue;
+        }
+        let path = format!("/org/gnome/settings-daemon/global-shortcuts/{app_id}/");
+        let settings = gio::Settings::new_full(&schema, gio::SettingsBackend::NONE, Some(&path));
+        let Some(shortcuts) = settings.value("shortcuts").get::<ApplicationShortcuts>() else {
+            continue;
+        };
+        let name = gio::DesktopAppInfo::new(&format!("{app_id}.desktop"))
+            .map_or_else(|| app_id.to_string(), |app| app.display_name().into());
+        for (id, properties) in shortcuts {
+            let description = properties
+                .get("description")
+                .and_then(glib::Variant::str)
+                .unwrap_or(&id);
+            let bindings = properties
+                .get("shortcuts")
+                .and_then(glib::Variant::get::<Vec<String>>)
+                .unwrap_or_default();
+            let title = format!("{name} — {description}");
+            let details = gtk::Box::new(gtk::Orientation::Vertical, 4);
+            details.set_hexpand(true);
+            details.append(&label(&title, "prefs-row-title"));
+            let display = bindings
+                .iter()
+                .map(|binding| {
+                    gtk::accelerator_parse(binding).map_or_else(
+                        || binding.clone(),
+                        |(key, modifiers)| gtk::accelerator_get_label(key, modifiers).to_string(),
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            details.append(&label(
+                if bindings.is_empty() {
+                    "Disabled"
+                } else {
+                    &display
+                },
+                "prefs-muted",
+            ));
+            let row = row(list, false);
+            row.append(&details);
+            let edit = gtk::Button::with_label("Edit");
+            edit.add_css_class("prefs-btn");
+            edit.set_valign(gtk::Align::Center);
+            edit.set_sensitive(settings.is_writable("shortcuts"));
+            let (window, list, settings, app_id) = (
+                window.downgrade(),
+                list.downgrade(),
+                settings.clone(),
+                app_id.to_string(),
+            );
+            edit.connect_clicked(move |_| {
+                if let (Some(window), Some(list)) = (window.upgrade(), list.upgrade()) {
+                    edit_shortcut(
+                        &window,
+                        &list,
+                        settings.clone(),
+                        app_id.clone(),
+                        id.clone(),
+                        &title,
+                        &bindings,
+                    );
+                }
+            });
+            row.append(&edit);
+        }
+    }
+    if let Some(last) = list.last_child() {
+        last.add_css_class("last");
+    } else {
+        row(list, true).append(&label(
+            "No applications have registered global shortcuts.",
+            "prefs-muted",
+        ));
+    }
+}
+
+fn global_shortcuts(page: &gtk::Box, window: &glib::WeakRef<gtk::ApplicationWindow>) {
+    let list = group(page, "Global Shortcuts");
+    page.append(&desktop_services::status(page, global_shortcuts_status));
+    let window = window.clone();
+    page.connect_map(move |_| {
+        if let Some(window) = window.upgrade() {
+            render_global_shortcuts(&list, &window);
+        }
+    });
+}
+
 pub(super) fn build(window: &gtk::ApplicationWindow) -> gtk::ScrolledWindow {
     let page = gtk::Box::new(gtk::Orientation::Vertical, 12);
     page.add_css_class("prefs-page-body");
@@ -479,6 +835,7 @@ pub(super) fn build(window: &gtk::ApplicationWindow) -> gtk::ScrolledWindow {
         }
     });
     page.append(&shortcuts);
+    global_shortcuts(&page, &window);
     let sources = group(&page, "Input Sources");
     input_source(&page, &sources, &window, "IBus", IBUS, false);
     input_source(&page, &sources, &window, "Fcitx", FCITX, true);

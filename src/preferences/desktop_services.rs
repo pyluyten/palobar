@@ -7,7 +7,7 @@ use std::future::Future;
 use std::os::unix::fs::MetadataExt;
 use std::rc::Rc;
 
-fn status<F, Check>(owner: &gtk::Box, check: Check) -> gtk::Label
+pub(super) fn status<F, Check>(owner: &gtk::Box, check: Check) -> gtk::Label
 where
     F: Future<Output = String> + 'static,
     Check: Fn() -> F + 'static,

@@ -16,6 +16,8 @@
       '';
     });
     desktopTools = [swaybg pkgs.swayidle];
+    gnomeSettings = pkgs.gnome-settings-daemon;
+    shortcutSchemas = "${gnomeSettings.gsettings-schemas or (pkgs.lib.getLib gnomeSettings)}/share/gsettings-schemas/${gnomeSettings.name}";
     runtimeTools = with pkgs; [
       niri
       networkmanager
@@ -49,6 +51,7 @@
 
       preFixup = ''
         gappsWrapperArgs+=(
+          --prefix XDG_DATA_DIRS : "${shortcutSchemas}"
           --set GDK_PIXBUF_MODULE_FILE "${pixbufLoaders}"
           --set PALOBAR_GTKSOURCE_LANGUAGE_DIR "$out/share/palobar/language-specs"
           --prefix PATH : "${pkgs.lib.makeBinPath desktopTools}"
