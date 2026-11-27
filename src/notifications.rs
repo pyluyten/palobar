@@ -441,8 +441,9 @@ impl Service {
             toasts.list.remove(&child);
         }
         for item in visible {
-            let card = gtk::Box::new(gtk::Orientation::Vertical, 4);
+            let card = gtk::Box::new(gtk::Orientation::Horizontal, 8);
             card.add_css_class("notification-toast-card");
+            let content = gtk::Box::new(gtk::Orientation::Vertical, 4);
             let header = gtk::Box::new(gtk::Orientation::Horizontal, 8);
             header.append(&app_icon(&item));
             let title = gtk::Label::builder()
@@ -459,16 +460,17 @@ impl Service {
                 .tooltip_text("Hide Notification")
                 .build();
             dismiss.add_css_class("notification-toast-dismiss");
+            dismiss.set_valign(gtk::Align::Start);
             let weak = Rc::downgrade(self);
+            let id = item.id;
             dismiss.connect_clicked(move |_| {
                 if let Some(service) = weak.upgrade() {
-                    service.hide_toast(item.id);
+                    service.hide_toast(id);
                 }
             });
-            header.append(&dismiss);
-            card.append(&header);
+            content.append(&header);
             if !item.body.is_empty() {
-                card.append(
+                content.append(
                     &gtk::Label::builder()
                         .label(&item.body)
                         .xalign(0.0)
@@ -478,6 +480,8 @@ impl Service {
                         .build(),
                 );
             }
+            card.append(&focus_target(&content, &item, false));
+            card.append(&dismiss);
             toasts.list.append(&card);
         }
         toasts.window.present();
@@ -665,9 +669,109 @@ impl Service {
     }
 }
 
+fn desktop_id(id: &str) -> &str {
+    let id = id.trim();
+    id.strip_suffix(".desktop").unwrap_or(id)
+}
+
+impl Notification {
+    pub(crate) fn desktop_id(&self) -> &str {
+        desktop_id(&self.desktop_entry)
+    }
+}
+
+#[derive(Deserialize)]
+struct NotificationWindow {
+    id: u64,
+    app_id: Option<String>,
+}
+
+fn first_window_for(windows: &[NotificationWindow], app_id: &str) -> Option<u64> {
+    let app_id = desktop_id(app_id);
+    if app_id.is_empty() {
+        return None;
+    }
+    windows.iter().find_map(|window| {
+        window
+            .app_id
+            .as_deref()
+            .filter(|id| desktop_id(id).eq_ignore_ascii_case(app_id))
+            .map(|_| window.id)
+    })
+}
+
+async fn focus_window(app_id: &str) -> Result<bool, String> {
+    let windows = crate::quick_settings::command(&["niri", "msg", "--json", "windows"]).await?;
+    let windows: Vec<NotificationWindow> =
+        serde_json::from_str(&windows).map_err(|error| error.to_string())?;
+    let Some(id) = first_window_for(&windows, app_id) else {
+        return Ok(false);
+    };
+    crate::quick_settings::command(&[
+        "niri",
+        "msg",
+        "action",
+        "focus-window",
+        "--id",
+        &id.to_string(),
+    ])
+    .await?;
+    Ok(true)
+}
+
+pub(crate) fn focus_target(
+    content: &gtk::Box,
+    notification: &Notification,
+    close_popup: bool,
+) -> gtk::Widget {
+    content.set_hexpand(true);
+    let app_id = notification.desktop_id();
+    if app_id.is_empty() {
+        return content.clone().upcast();
+    }
+    let button = gtk::Button::builder()
+        .child(content)
+        .hexpand(true)
+        .tooltip_text("Focus Application Window")
+        .build();
+    button.add_css_class("notification-focus");
+    button.set_cursor_from_name(Some("pointer"));
+    let app_id = app_id.to_owned();
+    let pending = Rc::new(Cell::new(false));
+    button.connect_clicked(move |button| {
+        if pending.replace(true) {
+            return;
+        }
+        let popup = if close_popup {
+            button
+                .root()
+                .and_downcast::<gtk::Window>()
+                .map(|window| window.downgrade())
+        } else {
+            None
+        };
+        let (app_id, pending) = (app_id.clone(), pending.clone());
+        glib::spawn_future_local(async move {
+            let result = focus_window(&app_id).await;
+            pending.set(false);
+            match result {
+                Ok(true) => {
+                    if let Some(window) = popup.and_then(|window| window.upgrade()) {
+                        window.close();
+                    }
+                }
+                Ok(false) => {}
+                Err(error) => {
+                    eprintln!("[notifications] Could not focus the application window: {error}")
+                }
+            }
+        });
+    });
+    button.upcast()
+}
+
 pub fn app_icon(notification: &Notification) -> gtk::Image {
-    let id = notification.desktop_entry.trim();
-    let desktop = id.strip_suffix(".desktop").unwrap_or(id);
+    let desktop = notification.desktop_id();
     let desktop_icon = (!desktop.is_empty())
         .then(|| gio::DesktopAppInfo::new(&format!("{desktop}.desktop")))
         .flatten()
@@ -737,6 +841,9 @@ pub fn start(app: &gtk::Application, display: &gdk::Display) -> Result<Rc<Servic
         .notification-toast-card { background: #333; color: #f6f5f4; min-width: 330px;
         border-radius: 18px; border: 1px solid rgba(255,255,255,0.12); padding: 12px; }
         .notification-toast-title { font-weight: 700; }
+        .notification-toast-card button.notification-focus {
+            background: transparent; border: none; padding: 0; box-shadow: none; color: inherit;
+        }
         .notification-toast-card button.notification-toast-dismiss {
             background: transparent; border: none; border-radius: 999px;
             box-shadow: none; padding: 2px 4px; color: rgba(246, 245, 244, 0.65);
@@ -790,7 +897,35 @@ pub async fn dnd(toggle: bool) -> Option<bool> {
 
 #[cfg(test)]
 mod tests {
-    use super::{limit, History};
+    use super::{first_window_for, limit, History, NotificationWindow};
+
+    #[test]
+    fn notification_selects_the_first_matching_window() {
+        let windows = [
+            NotificationWindow {
+                id: 3,
+                app_id: None,
+            },
+            NotificationWindow {
+                id: 4,
+                app_id: Some("org.example.Other".into()),
+            },
+            NotificationWindow {
+                id: 9,
+                app_id: Some("org.example.App".into()),
+            },
+            NotificationWindow {
+                id: 2,
+                app_id: Some("org.example.App".into()),
+            },
+        ];
+        assert_eq!(
+            first_window_for(&windows, "org.example.App.desktop"),
+            Some(9)
+        );
+        assert_eq!(first_window_for(&windows, "org.example.Missing"), None);
+        assert_eq!(first_window_for(&windows, ""), None);
+    }
 
     #[test]
     fn notification_ids_never_use_zero_even_after_wrapping() {

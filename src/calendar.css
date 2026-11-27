@@ -34,6 +34,14 @@ window.date-menu-window {
   background: rgba(0, 0, 0, 0.18);
 }
 
+.date-notification-item button.notification-focus {
+  background: transparent;
+  color: inherit;
+  border: none;
+  padding: 0;
+  box-shadow: none;
+}
+
 .date-notification-body { color: #ccc; }
 
 .date-button {

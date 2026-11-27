@@ -1,4 +1,4 @@
-use crate::notifications::{app_icon, request, Notification, Snapshot};
+use crate::notifications::{app_icon, focus_target, request, Notification, Snapshot};
 use gtk::glib;
 use gtk::prelude::*;
 use std::cell::{Cell, RefCell};
@@ -7,11 +7,6 @@ use std::rc::Rc;
 use std::time::Duration;
 
 impl Notification {
-    fn desktop_id(&self) -> &str {
-        let id = self.desktop_entry.trim();
-        id.strip_suffix(".desktop").unwrap_or(id)
-    }
-
     fn key(&self) -> String {
         let desktop = self.desktop_id();
         if desktop.is_empty() {
@@ -55,8 +50,9 @@ struct Feed {
 
 impl Feed {
     fn row(self: &Rc<Self>, notification: &Notification) -> gtk::Box {
-        let item = gtk::Box::new(gtk::Orientation::Vertical, 4);
+        let item = gtk::Box::new(gtk::Orientation::Horizontal, 6);
         item.add_css_class("date-notification-item");
+        let content = gtk::Box::new(gtk::Orientation::Vertical, 4);
         let header = gtk::Box::new(gtk::Orientation::Horizontal, 6);
         let summary = super::label(&notification.summary, "date-notification-summary");
         summary.set_hexpand(true);
@@ -71,6 +67,7 @@ impl Feed {
             .unwrap_or_default();
         header.append(&super::label(&time, "date-muted"));
         let dismiss = super::icon_button("window-close-symbolic", "Dismiss Notification");
+        dismiss.set_valign(gtk::Align::Start);
         let id = notification.id;
         let weak = Rc::downgrade(self);
         dismiss.connect_clicked(move |_| {
@@ -78,8 +75,7 @@ impl Feed {
                 feed.act("Dismiss", Some(id));
             }
         });
-        header.append(&dismiss);
-        item.append(&header);
+        content.append(&header);
         if !notification.body.is_empty() {
             let body = gtk::Label::builder()
                 .label(&notification.body)
@@ -89,8 +85,10 @@ impl Feed {
                 .max_width_chars(38)
                 .build();
             body.add_css_class("date-notification-body");
-            item.append(&body);
+            content.append(&body);
         }
+        item.append(&focus_target(&content, notification, true));
+        item.append(&dismiss);
         item
     }
 
